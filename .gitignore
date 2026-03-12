@@ -22,10 +22,12 @@ build/
 venv/
 env/
 
-# Hydra / MLflow outputs
+# Hydra / MLflow / W&B outputs
 mlruns/
 .hydra/
 multirun/
+wandb/
+.netrc
 
 # Jupyter
 .ipynb_checkpoints/

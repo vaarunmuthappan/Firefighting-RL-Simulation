@@ -17,3 +17,11 @@ eval_episodes: 5
 experiment_name: Firefighting-RL
 run_name: reference_agent
 verbose: 1
+
+# W&B settings
+wandb_project: "Firefighting RL"
+
+# GIF recording — logs a visual episode replay every gif_freq steps.
+# Keep this value high to save W&B storage (each GIF is ~1-5 MB).
+# First GIF is recorded at gif_freq (not step 0).
+gif_freq: 25000

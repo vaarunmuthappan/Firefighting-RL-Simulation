@@ -1,12 +1,13 @@
 """Main training orchestration for the firefighting RL agent.
 
-Loads YAML configs, builds environment and agent, wires up MLflow logging,
-runs training, evaluates the final model, and saves artefacts — all in one
-``train()`` function that main_train.py calls.
+Loads YAML configs, builds environment and agent, wires up W&B logging
+(including periodic GIF recording), runs training, evaluates the final
+model, and saves artefacts.
 """
 import os
 from typing import Optional
 
+import numpy as np
 import yaml
 
 from agents.dqn_agent import DQNAgent
@@ -14,7 +15,7 @@ from agents.ppo_agent import PPOAgent
 from environment.fire_env import FireEnv
 from training.callbacks import CheckpointCallback, EvalCallback
 from training.evaluate import evaluate_agent
-from utils.logger import MLflowLogger, SB3MLflowCallback
+from utils.logger import WandbLogger, SB3WandbCallback, GifRecorderCallback
 
 
 def _load_yaml(path: str) -> dict:
@@ -28,28 +29,17 @@ def train(
     algorithm: Optional[str] = None,
     total_timesteps: Optional[int] = None,
 ) -> None:
-    """End-to-end training pipeline for the firefighting RL agent.
+    """End-to-end training pipeline with W&B tracking.
 
-    Steps
-    -----
-    1. Load env_config.yaml, agent_config.yaml, train_config.yaml.
-    2. Setup MLflowLogger and tag the run with AGENT_NAME.
-    3. Log all hyperparameters to MLflow.
-    4. Build FireEnv from merged config.
-    5. Build DQNAgent or PPOAgent based on train_config.
-    6. Build SB3MLflowCallback and CheckpointCallback.
-    7. Train for ``total_timesteps`` steps.
-    8. Save the final model checkpoint.
-    9. Run post-training evaluation.
-    10. Log evaluation metrics and final model artifact to MLflow.
-    11. End the MLflow run.
+    Logs to W&B:
+    - Per-episode: reward, episode length  (→ line charts)
+    - Periodic: GIF recordings of agent behaviour (→ media panel)
+    - Final: evaluation metrics, model checkpoint artifact
 
     Args:
-        config_dir: Path to the directory containing the three YAML config
-            files (default "config/").
-        algorithm: Override the algorithm specified in train_config.yaml.
-            Accepts "DQN" or "PPO".
-        total_timesteps: Override total training timesteps from train_config.
+        config_dir: Path to YAML config directory.
+        algorithm: Override algorithm from config ("DQN" or "PPO").
+        total_timesteps: Override total training timesteps.
     """
     # ------------------------------------------------------------------
     # 1. Load configs
@@ -58,56 +48,51 @@ def train(
     agent_cfg = _load_yaml(os.path.join(config_dir, "agent_config.yaml"))
     train_cfg = _load_yaml(os.path.join(config_dir, "train_config.yaml"))
 
-    # Apply CLI overrides
     if algorithm is not None:
         train_cfg["algorithm"] = algorithm
     if total_timesteps is not None:
         train_cfg["total_timesteps"] = total_timesteps
 
-    # Merge env + agent configs into a single flat dict for FireEnv
     merged_env_cfg = {**env_cfg, **agent_cfg}
 
     algo_name: str = train_cfg.get("algorithm", "DQN").upper()
     run_name: str = train_cfg.get("run_name", "reference_agent")
-    experiment_name: str = train_cfg.get("experiment_name", "Firefighting-RL")
     timesteps: int = int(train_cfg.get("total_timesteps", 50000))
     checkpoint_dir: str = train_cfg.get("checkpoint_dir", "checkpoints/")
     checkpoint_freq: int = int(train_cfg.get("checkpoint_freq", 10000))
     eval_episodes: int = int(train_cfg.get("eval_episodes", 5))
+    gif_freq: int = int(train_cfg.get("gif_freq", 10000))
 
     # ------------------------------------------------------------------
-    # 2. Setup MLflowLogger
+    # 2. Setup W&B logger
     # ------------------------------------------------------------------
-    tags = {
-        "agent": "reference_agent",
-        "algorithm": algo_name,
-        "AGENT_NAME": "reference_agent",
+    all_params = {
+        **{f"env/{k}": v for k, v in env_cfg.items()},
+        **{f"agent/{k}": v for k, v in agent_cfg.items()},
+        **{f"train/{k}": v for k, v in train_cfg.items()},
     }
-    logger = MLflowLogger(experiment_name, run_name, tags=tags)
+    # Convert non-scalar values to strings for W&B config
+    config_for_wandb = {
+        k: str(v) if isinstance(v, (list, dict)) else v
+        for k, v in all_params.items()
+    }
+
+    project = os.getenv("WANDB_PROJECT", train_cfg.get("wandb_project", "Firefighting RL"))
+    logger = WandbLogger(
+        project=project,
+        run_name=run_name,
+        config=config_for_wandb,
+        tags=["reference_agent", algo_name],
+    )
 
     try:
         # ------------------------------------------------------------------
-        # 3. Log hyperparameters
-        # ------------------------------------------------------------------
-        all_params = {
-            **{f"env_{k}": v for k, v in env_cfg.items()},
-            **{f"agent_{k}": v for k, v in agent_cfg.items()},
-            **{f"train_{k}": v for k, v in train_cfg.items()},
-        }
-        # MLflow requires scalar param values; convert lists to strings
-        serialisable = {
-            k: str(v) if isinstance(v, (list, dict)) else v
-            for k, v in all_params.items()
-        }
-        logger.log_params(serialisable)
-
-        # ------------------------------------------------------------------
-        # 4. Build FireEnv
+        # 3. Build environment
         # ------------------------------------------------------------------
         env = FireEnv(merged_env_cfg)
 
         # ------------------------------------------------------------------
-        # 5. Build agent
+        # 4. Build agent
         # ------------------------------------------------------------------
         agent_model_cfg = {
             "policy": train_cfg.get("policy", "CnnPolicy"),
@@ -127,32 +112,36 @@ def train(
         elif algo_name == "PPO":
             agent = PPOAgent(env, agent_model_cfg)
         else:
-            raise ValueError(
-                f"Unknown algorithm '{algo_name}'. Expected 'DQN' or 'PPO'."
-            )
+            raise ValueError(f"Unknown algorithm '{algo_name}'.")
 
         # ------------------------------------------------------------------
-        # 6. Build callbacks
+        # 5. Build callbacks
         # ------------------------------------------------------------------
-        mlflow_cb = SB3MLflowCallback(logger, log_freq=1000)
+        wandb_cb = SB3WandbCallback(logger)
         checkpoint_cb = CheckpointCallback(
             checkpoint_freq=checkpoint_freq,
             checkpoint_dir=checkpoint_dir,
             run_name=run_name,
-            mlflow_logger=logger,
+            wandb_logger=logger,
+        )
+        gif_cb = GifRecorderCallback(
+            env_config=merged_env_cfg,
+            wandb_logger=logger,
+            gif_freq=gif_freq,
         )
 
         # ------------------------------------------------------------------
-        # 7. Train
+        # 6. Train
         # ------------------------------------------------------------------
         print(f"[train] Starting {algo_name} training for {timesteps} timesteps …")
+        print(f"[train] GIFs will be recorded every {gif_freq} steps")
         agent.train(
             total_timesteps=timesteps,
-            callbacks=[mlflow_cb, checkpoint_cb],
+            callbacks=[wandb_cb, checkpoint_cb, gif_cb],
         )
 
         # ------------------------------------------------------------------
-        # 8. Save final model
+        # 7. Save final model
         # ------------------------------------------------------------------
         os.makedirs(checkpoint_dir, exist_ok=True)
         final_path = os.path.join(checkpoint_dir, f"{run_name}_{algo_name.lower()}")
@@ -160,7 +149,7 @@ def train(
         print(f"[train] Final model saved to {final_path}.zip")
 
         # ------------------------------------------------------------------
-        # 9. Evaluate
+        # 8. Evaluate
         # ------------------------------------------------------------------
         print(f"[train] Running evaluation over {eval_episodes} episodes …")
         eval_env = FireEnv(merged_env_cfg)
@@ -173,9 +162,9 @@ def train(
         )
 
         # ------------------------------------------------------------------
-        # 10. Log eval metrics + artefact
+        # 9. Log final metrics + model artifact to W&B
         # ------------------------------------------------------------------
-        logger.log_metrics(
+        logger.log(
             {
                 "final_mean_reward": eval_results["mean_reward"],
                 "final_std_reward": eval_results["std_reward"],
@@ -184,11 +173,71 @@ def train(
             step=timesteps,
         )
         if os.path.isfile(final_path + ".zip"):
-            logger.log_artifact(final_path + ".zip")
+            logger.log_artifact(
+                final_path + ".zip",
+                name="final-model",
+                artifact_type="model",
+            )
+
+        # ------------------------------------------------------------------
+        # 10. Record one final GIF using matplotlib (no display needed)
+        # ------------------------------------------------------------------
+        print("[train] Recording final evaluation GIF …")
+        try:
+            import shutil
+            import tempfile
+            from PIL import Image as PILImage
+
+            gif_env = FireEnv(merged_env_cfg)
+            obs, _ = gif_env.reset()
+            done = False
+            total_reward = 0.0
+            frames = []
+            step_count = 0
+
+            while not done:
+                action = agent.get_action(obs)
+                obs, reward, terminated, truncated, _ = gif_env.step(action)
+                total_reward += reward
+                done = terminated or truncated
+                step_count += 1
+
+                if step_count % 9 == 0 or done:
+                    fire_map = np.copy(gif_env.sim.fire_map)
+                    ap = gif_env.agent_pos
+                    h, w = fire_map.shape
+                    rgb = np.zeros((h, w, 3), dtype=np.uint8)
+                    rgb[fire_map == 0] = [34, 139, 34]
+                    rgb[fire_map == 1] = [255, 50, 0]
+                    rgb[fire_map == 2] = [80, 80, 80]
+                    rgb[fire_map == 3] = [0, 120, 255]
+                    for di in [-1, 0, 1]:
+                        for dj in [-1, 0, 1]:
+                            r, c = ap[0] + di, ap[1] + dj
+                            if 0 <= r < h and 0 <= c < w:
+                                rgb[r, c] = [255, 255, 0]
+                    img = PILImage.fromarray(rgb).resize((w * 4, h * 4), PILImage.NEAREST)
+                    frames.append(img)
+
+            if frames:
+                tmp_dir = tempfile.mkdtemp(prefix="wandb_final_gif_")
+                gif_path = os.path.join(tmp_dir, "final_episode.gif")
+                frames[0].save(
+                    gif_path, save_all=True, append_images=frames[1:],
+                    duration=100, loop=0,
+                )
+                logger.log_gif(
+                    gif_path, key="final_episode", step=timesteps,
+                    caption=f"Final eval | Reward: {total_reward:.1f}",
+                )
+                print(f"[train] Final GIF logged ({len(frames)} frames, reward={total_reward:.1f})")
+                shutil.rmtree(tmp_dir, ignore_errors=True)
+        except Exception as e:
+            print(f"[train] Final GIF recording failed: {e}")
 
     finally:
         # ------------------------------------------------------------------
-        # 11. End MLflow run (always, even on exception)
+        # 11. Close W&B run (always, even on exception)
         # ------------------------------------------------------------------
-        logger.end_run()
-        print("[train] MLflow run closed.")
+        logger.finish()
+        print("[train] W&B run closed.")

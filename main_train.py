@@ -6,7 +6,7 @@ Usage
     python main_train.py --config-dir config/
     python main_train.py --algorithm PPO --timesteps 100000
 
-All MLflow runs are tagged with AGENT_NAME = "reference_agent".
+All W&B runs are tagged with AGENT_NAME = "reference_agent".
 """
 AGENT_NAME = "reference_agent"
 
