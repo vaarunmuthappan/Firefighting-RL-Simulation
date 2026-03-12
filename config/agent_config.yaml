@@ -1,0 +1,12 @@
+# Agent configuration
+type: DQN              # DQN, PPO, Heuristic
+movements:
+  - up
+  - down
+  - left
+  - right
+interactions:
+  - fireline
+initial_pos: [15, 15]
+randomize_pos: true     # randomize start position each episode
+agent_speed: 9          # fire advances every N agent steps

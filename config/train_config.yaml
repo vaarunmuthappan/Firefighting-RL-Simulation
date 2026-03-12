@@ -1,0 +1,19 @@
+# Training configuration
+algorithm: DQN
+policy: CnnPolicy          # CnnPolicy for image obs, MlpPolicy for flat
+total_timesteps: 50000
+learning_rate: 0.0001
+batch_size: 32
+gamma: 0.99
+buffer_size: 50000
+train_freq: 4
+target_update_interval: 1000
+exploration_fraction: 0.3
+exploration_final_eps: 0.05
+checkpoint_dir: checkpoints/
+checkpoint_freq: 10000
+eval_freq: 10000
+eval_episodes: 5
+experiment_name: Firefighting-RL
+run_name: reference_agent
+verbose: 1

@@ -1,0 +1,24 @@
+# Fire environment configuration
+screen_size: 64
+pixel_scale: 12
+attributes:
+  - fire_map
+  - elevation
+  - w_0
+  - sigma
+  - delta
+  - M_x
+normalized_attributes:
+  - elevation
+  - w_0
+  - sigma
+  - delta
+  - M_x
+terrain_type: functional   # functional (no download) or operational (LANDFIRE)
+wind_speed: 2
+wind_direction: 135.0
+moisture: 0.03
+fire_position_type: random  # static or random
+max_fire_duration: 4
+headless: true
+max_episode_steps: 2000
