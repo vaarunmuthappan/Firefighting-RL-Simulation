@@ -233,47 +233,51 @@ class DataDrivenFireEnv(BaseFireEnv):
 
         For each fire timestep t, cells with arrival==t are sorted by distance
         from the t-1 fire perimeter and distributed evenly across sub-steps.
+
+        Optimized: build cumulative fire mask incrementally instead of calling
+        distance_transform_edt on the full grid each timestep.
         """
-        # Number of agent actions per fire timestep (across all agents)
-        # Each agent gets time_budget worth of actions; fire advances once
-        # all agents have exhausted their budget for this timestep
         self.actions_per_fire_step = config.get("actions_per_fire_step", 36)
 
         self.fire_schedule: Dict[int, List[List[Tuple[int, int]]]] = {}
 
+        # Build sorted cell lists incrementally
+        # cumulative_fire tracks which cells have arrived up to t-1
+        cumulative_fire = np.zeros((self.fire_arrival.shape[0], self.fire_arrival.shape[1]), dtype=bool)
+
         for t in range(0, self.max_fire_timestep + 1):
-            cells = np.argwhere(self.fire_arrival == t)
-            if len(cells) == 0:
+            cell_coords = np.argwhere(self.fire_arrival == t)
+            if len(cell_coords) == 0:
+                # Update cumulative (nothing new)
                 self.fire_schedule[t] = []
                 continue
 
-            if t == 0:
-                # First timestep: all cells ignite at once
-                self.fire_schedule[t] = [list(map(tuple, cells))]
-                continue
-
-            # Sort cells by distance from previous fire front
-            prev_fire = (self.fire_arrival < t) & (self.fire_arrival >= 0)
-            if np.any(prev_fire):
-                dist = distance_transform_edt(~prev_fire)
-                distances = dist[cells[:, 0], cells[:, 1]]
-                order = np.argsort(distances)
-                cells = cells[order]
-
-            # Distribute cells across sub-steps
-            n_sub = self.actions_per_fire_step
-            batches: List[List[Tuple[int, int]]] = []
-            if len(cells) <= n_sub:
-                # Fewer cells than sub-steps: one cell per batch, rest empty
-                for cell in cells:
-                    batches.append([(int(cell[0]), int(cell[1]))])
+            if t == 0 or not np.any(cumulative_fire):
+                # First timestep or no prior fire: all cells ignite at sub-step 0
+                self.fire_schedule[t] = [list(map(tuple, cell_coords))]
             else:
-                # Split evenly
-                splits = np.array_split(cells, n_sub)
-                for split in splits:
-                    batches.append([(int(r), int(c)) for r, c in split])
+                # Sort cells by distance from existing fire front using EDT
+                # Only compute EDT once per timestep (not per sub-step)
+                dist = distance_transform_edt(~cumulative_fire)
+                distances = dist[cell_coords[:, 0], cell_coords[:, 1]]
+                order = np.argsort(distances)
+                cell_coords = cell_coords[order]
 
-            self.fire_schedule[t] = batches
+                # Distribute across sub-steps
+                n_sub = self.actions_per_fire_step
+                batches: List[List[Tuple[int, int]]] = []
+                if len(cell_coords) <= n_sub:
+                    for cell in cell_coords:
+                        batches.append([(int(cell[0]), int(cell[1]))])
+                else:
+                    splits = np.array_split(cell_coords, n_sub)
+                    for split in splits:
+                        batches.append([(int(r), int(c)) for r, c in split])
+
+                self.fire_schedule[t] = batches
+
+            # Update cumulative mask for next timestep
+            cumulative_fire[cell_coords[:, 0], cell_coords[:, 1]] = True
 
     def _create_entry_stations(self, all_stations: list) -> list:
         """Create virtual entry stations from nearest out-of-grid stations."""
