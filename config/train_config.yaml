@@ -1,11 +1,11 @@
 # Training configuration — Camp Fire data-driven multi-agent
 algorithm: DQN
-policy: CnnPolicy
+policy: CnnPolicy          # CnnPolicy for spatial obs (26x27x6 after 4x downsample)
 total_timesteps: 200000
 learning_rate: 0.0001
 batch_size: 32
 gamma: 0.99
-buffer_size: 50000
+buffer_size: 10000         # 10k * 26*27*6*4bytes*2 = ~337MB (manageable)
 train_freq: 4
 target_update_interval: 1000
 exploration_fraction: 0.3

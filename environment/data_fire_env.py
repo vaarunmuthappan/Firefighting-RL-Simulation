@@ -191,11 +191,20 @@ class DataDrivenFireEnv(BaseFireEnv):
             else:
                 self.min_maxes[attr] = {"min": 0.0, "max": 1.0}
 
+        # Observation downsampling for memory efficiency
+        # Default 4x downsample: (101,107,6) → (26,27,6) = 4,212 floats
+        # vs full (101,107,6) = 64,842 floats. Buffer of 10k: ~337MB vs ~25GB.
+        self.obs_downsample = config.get("obs_downsample", 4)
+        # Use ceiling division to match actual slice [::obs_downsample] output size
+        import math
+        self.obs_rows = max(1, math.ceil(grid_rows / self.obs_downsample))
+        self.obs_cols = max(1, math.ceil(grid_cols / self.obs_downsample))
+
         # Spaces — sequential multi-agent: one action per step for current agent
         num_attrs = len(self.attributes)
         self.observation_space = spaces.Box(
             low=0.0, high=1.0,
-            shape=(grid_rows, grid_cols, num_attrs),
+            shape=(self.obs_rows, self.obs_cols, num_attrs),
             dtype=np.float32,
         )
         self.action_space = spaces.Discrete(self.actions_per_agent)
@@ -540,7 +549,13 @@ class DataDrivenFireEnv(BaseFireEnv):
         for attr in self.attributes:
             channels.append(np.asarray(attr_data[attr], dtype=np.float32))
 
-        return np.stack(channels, axis=-1).astype(np.float32)
+        full_obs = np.stack(channels, axis=-1).astype(np.float32)
+
+        # Downsample by taking every obs_downsample-th pixel (fastest, no blur)
+        if self.obs_downsample > 1:
+            full_obs = full_obs[::self.obs_downsample, ::self.obs_downsample, :]
+
+        return full_obs
 
     def _ignite_full_timestep(self, t: int) -> None:
         """Ignite all cells for a given fire timestep at once."""
