@@ -148,9 +148,9 @@ class SB3WandbCallback(BaseCallback):
 class GifRecorderCallback(BaseCallback):
     """SB3 callback that records a GIF of agent behaviour at fixed intervals.
 
-    At every ``gif_freq`` timesteps, creates a fresh FireEnv, runs one
-    episode with the current policy (deterministic), saves the SimFire GIF,
-    and uploads it to W&B.
+    At every ``gif_freq`` timesteps, resets the *existing* training environment,
+    runs one episode with the current policy (deterministic), saves the frames
+    as a GIF, and uploads it to W&B.
 
     Storage-conscious: only records at the specified interval, and cleans
     up local temp files immediately after upload.
@@ -158,20 +158,22 @@ class GifRecorderCallback(BaseCallback):
 
     def __init__(
         self,
-        env_config: dict,
+        train_env,
         wandb_logger: WandbLogger,
         gif_freq: int = 10000,
         verbose: int = 1,
     ) -> None:
         """
         Args:
-            env_config: Merged env+agent config dict to build a fresh FireEnv.
+            train_env: The *already-initialised* FireEnv used for training.
+                       Reused for GIF recording to avoid re-triggering
+                       LANDFIRE downloads.
             wandb_logger: Active WandbLogger for uploading.
             gif_freq: Record a GIF every this many timesteps.
             verbose: 0 = quiet, 1 = print status.
         """
         super().__init__(verbose=verbose)
-        self.env_config = env_config
+        self.train_env = train_env
         self.wandb_logger = wandb_logger
         self.gif_freq = gif_freq
 
@@ -191,20 +193,19 @@ class GifRecorderCallback(BaseCallback):
 
     def _record_and_upload(self) -> None:
         """Record episode frames using matplotlib (no pygame display needed)."""
-        from environment.fire_env import FireEnv
-        import matplotlib
-        matplotlib.use("Agg")
-        import matplotlib.pyplot as plt
         from PIL import Image as PILImage
 
-        gif_env = FireEnv(self.env_config)
-        # Do NOT enable sim.rendering — we capture fire_map directly
+        gif_env = self.train_env
 
         obs, _ = gif_env.reset()
         done = False
         total_reward = 0.0
         frames = []
         frame_step = 0
+
+        # Determine frame capture interval based on env type
+        num_agents = getattr(gif_env, "num_agents", 1)
+        frame_interval = max(1, num_agents)
 
         while not done:
             action, _ = self.model.predict(obs, deterministic=True)
@@ -213,26 +214,36 @@ class GifRecorderCallback(BaseCallback):
             done = terminated or truncated
             frame_step += 1
 
-            # Capture a frame every 9 steps (matches agent_speed) to keep GIF small
-            if frame_step % 9 == 0 or done:
-                fire_map = np.copy(gif_env.sim.fire_map)
-                agent_pos = gif_env.agent_pos
+            # Capture frame every num_agents steps (one full round of all agents)
+            if frame_step % frame_interval == 0 or done:
+                # Support both DataDrivenFireEnv (fire_map attr) and FireEnv (sim.fire_map)
+                if hasattr(gif_env, "fire_map"):
+                    fire_map = np.copy(gif_env.fire_map)
+                else:
+                    fire_map = np.copy(gif_env.sim.fire_map)
 
-                # Build RGB image: green=unburned, red=burning, grey=burned, blue=fireline, yellow=agent
+                # Build RGB image
                 h, w = fire_map.shape
                 rgb = np.zeros((h, w, 3), dtype=np.uint8)
                 rgb[fire_map == 0] = [34, 139, 34]    # unburned = forest green
                 rgb[fire_map == 1] = [255, 50, 0]     # burning = red-orange
                 rgb[fire_map == 2] = [80, 80, 80]     # burned = dark grey
                 rgb[fire_map == 3] = [0, 120, 255]    # fireline = blue
-                # Agent position = bright yellow
-                rgb[agent_pos[0], agent_pos[1]] = [255, 255, 0]
-                # Make agent 3x3 for visibility
-                for di in [-1, 0, 1]:
-                    for dj in [-1, 0, 1]:
-                        r, c = agent_pos[0] + di, agent_pos[1] + dj
-                        if 0 <= r < h and 0 <= c < w:
-                            rgb[r, c] = [255, 255, 0]
+                rgb[fire_map == 4] = [255, 165, 0]    # scratchline = orange
+                rgb[fire_map == 5] = [0, 200, 200]    # wetline = cyan
+
+                # All fire truck agents = bright yellow (3x3 marker)
+                if hasattr(gif_env, "agents"):
+                    agent_positions = [ag["pos"] for ag in gif_env.agents]
+                else:
+                    agent_positions = [gif_env.agent_pos]
+
+                for ap in agent_positions:
+                    for di in [-1, 0, 1]:
+                        for dj in [-1, 0, 1]:
+                            r, c = ap[0] + di, ap[1] + dj
+                            if 0 <= r < h and 0 <= c < w:
+                                rgb[r, c] = [255, 255, 0]  # yellow = fire truck
 
                 # Scale up for visibility (4x)
                 img = PILImage.fromarray(rgb).resize(

@@ -1,136 +1,97 @@
-"""Modular reward functions for the firefighting RL environment.
+"""Reward functions for the firefighting RL environment.
 
-All functions operate at the module level (not as class methods) so that
-individual terms can be combined freely or swapped out in experiments.
+Two reward systems:
+  A. Data-driven env (DataDrivenFireEnv):
+     1. Area penalty: -proportion of total cells that are burned/burning
+     2. Population penalty: -1,000,000 × population of newly burned pixels
+     3. Timestep penalty: -1000 per step (applied in env.step())
 
-Typical usage::
-
-    r = combined_reward(
-        fire_map=fire_map,
-        screen_size=64,
-        is_active=sim_active,
-        agent_pos=agent_pos,
-        use_proximity=True,
-        use_coverage=True,
-    )
+  B. SimFire env (FireEnv) — kept for backwards compatibility:
+     1. Burning RoS penalty
+     2. Mitigation contact reward
+     3. Timestep penalty: -1000 per step
 """
-from typing import List
-
 import numpy as np
+from scipy.ndimage import binary_dilation
+
+# BurnStatus values
+_UNBURNED = 0
+_BURNING = 1
+_BURNED = 2
+_FIRELINE = 3
+_SCRATCHLINE = 4
+_WETLINE = 5
+
+# SimFire default RoS attenuation values (ft/min reduction)
+_ATTENUATION = {
+    _FIRELINE: 980.0,
+    _SCRATCHLINE: 490.0,
+    _WETLINE: 245.0,
+}
+
+# 4-connected structuring element (edge-adjacent, no diagonals)
+_CROSS_KERNEL = np.array([[0, 1, 0],
+                          [1, 0, 1],
+                          [0, 1, 0]], dtype=bool)
 
 
-def burning_area_penalty(fire_map: np.ndarray, screen_size: int) -> float:
-    """Penalise the fraction of the map that is currently burning.
+# ---------------------------------------------------------------------------
+# Data-driven reward (DataDrivenFireEnv)
+# ---------------------------------------------------------------------------
 
-    Args:
-        fire_map: 2D numpy array with BurnStatus values. Burning cells have
-            value ``1``.
-        screen_size: Side length of the square map used to compute total area.
-
-    Returns:
-        Reward in range [-10, 0]: ``-(burning_cells / total_cells) * 10``.
-    """
-    burning = int(np.count_nonzero(fire_map == 1))
-    total = screen_size ** 2
-    return -(burning / total) * 10.0
-
-
-def extinguished_bonus(is_active: bool, bonus: float = 10.0) -> float:
-    """Return a one-time bonus when the fire is fully extinguished.
-
-    Args:
-        is_active: ``True`` if the fire is still spreading, ``False`` if it
-            has been fully extinguished.
-        bonus: Reward magnitude (default 10.0).
-
-    Returns:
-        ``bonus`` if ``not is_active``, else ``0.0``.
-    """
-    return bonus if not is_active else 0.0
-
-
-def proximity_penalty(
-    agent_pos: List[int],
+def data_driven_reward(
     fire_map: np.ndarray,
-    penalty: float = 2.0,
+    population_grid: np.ndarray,
+    prev_burned_mask: np.ndarray,
+    total_cells: int,
 ) -> float:
-    """Penalise the agent for standing adjacent to a burning cell.
-
-    Uses 8-connectivity (all 8 neighbours of the agent's position).
+    """Reward for the data-driven fire environment.
 
     Args:
-        agent_pos: [row, col] position of the agent.
-        fire_map: 2D numpy array with BurnStatus values.
-        penalty: Penalty magnitude (default 2.0, returned as negative).
+        fire_map: 2D array with BurnStatus values.
+        population_grid: 2D float array of population per cell.
+        prev_burned_mask: Boolean 2D array — True for cells that were already
+            burned/burning BEFORE this fire advance.
+        total_cells: Total number of cells in the grid (rows × cols).
 
     Returns:
-        ``-penalty`` if any 8-connected neighbour is burning, else ``0.0``.
+        Scalar reward (area penalty + population penalty).
+        Timestep penalty is applied separately in env.step().
     """
-    row, col = agent_pos[0], agent_pos[1]
-    rows, cols = fire_map.shape
+    burned_mask = (fire_map == _BURNED) | (fire_map == _BURNING)
+    proportion_burned = float(np.sum(burned_mask)) / total_cells
+    area_penalty = -proportion_burned
 
-    for dr in [-1, 0, 1]:
-        for dc in [-1, 0, 1]:
-            if dr == 0 and dc == 0:
-                continue
-            nr, nc = row + dr, col + dc
-            if 0 <= nr < rows and 0 <= nc < cols:
-                if fire_map[nr][nc] == 1:
-                    return -penalty
+    newly_burned = burned_mask & ~prev_burned_mask
+    pop_penalty = -1_000_000.0 * float(np.sum(population_grid[newly_burned]))
 
-    return 0.0
+    return area_penalty + pop_penalty
 
 
-def fireline_coverage_bonus(
-    fire_map: np.ndarray,
-    bonus_per_cell: float = 0.1,
-) -> float:
-    """Small positive reward for the total number of fireline cells placed.
+# ---------------------------------------------------------------------------
+# SimFire reward (FireEnv) — backwards compatible
+# ---------------------------------------------------------------------------
 
-    Args:
-        fire_map: 2D numpy array with BurnStatus values. Fireline cells have
-            value ``3``.
-        bonus_per_cell: Reward per fireline cell (default 0.1).
-
-    Returns:
-        ``fireline_cells * bonus_per_cell``.
-    """
-    fireline_cells = int(np.count_nonzero(fire_map == 3))
-    return fireline_cells * bonus_per_cell
+def burning_ros_penalty(fire_map: np.ndarray, ros_grid: np.ndarray) -> float:
+    """Negative sum of rate-of-spread over all burning cells."""
+    burning_mask = (fire_map == _BURNING)
+    return -float(np.sum(ros_grid[burning_mask]))
 
 
-def combined_reward(
-    fire_map: np.ndarray,
-    screen_size: int,
-    is_active: bool,
-    agent_pos: List[int],
-    use_proximity: bool = False,
-    use_coverage: bool = False,
-) -> float:
-    """Combine reward terms into a single scalar.
+def mitigation_contact_reward(fire_map: np.ndarray) -> float:
+    """Positive reward for mitigation cells that share an edge with fire."""
+    burning_mask = (fire_map == _BURNING)
+    fire_adjacent = binary_dilation(burning_mask, structure=_CROSS_KERNEL)
 
-    This is the main reward function to call from the environment. The
-    burning-area penalty and extinguishment bonus are always included.
-    Proximity penalty and fireline coverage bonus are optional.
-
-    Args:
-        fire_map: 2D numpy array with BurnStatus values.
-        screen_size: Side length of the square map.
-        is_active: Whether the fire is still spreading.
-        agent_pos: [row, col] agent position (used for proximity penalty).
-        use_proximity: Include proximity penalty if ``True``.
-        use_coverage: Include fireline coverage bonus if ``True``.
-
-    Returns:
-        Combined scalar reward.
-    """
-    reward = burning_area_penalty(fire_map, screen_size)
-    reward += extinguished_bonus(is_active)
-
-    if use_proximity:
-        reward += proximity_penalty(agent_pos, fire_map)
-
-    if use_coverage:
-        reward += fireline_coverage_bonus(fire_map)
+    reward = 0.0
+    for mit_status, attenuation in _ATTENUATION.items():
+        mit_mask = (fire_map == mit_status)
+        contacts = mit_mask & fire_adjacent
+        reward += float(np.count_nonzero(contacts)) * attenuation
 
     return reward
+
+
+def combined_reward(fire_map: np.ndarray, ros_grid: np.ndarray) -> float:
+    """Compute the full reward for a SimFire simulation step."""
+    return burning_ros_penalty(fire_map, ros_grid) + mitigation_contact_reward(fire_map)

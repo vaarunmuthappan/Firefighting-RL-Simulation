@@ -1,0 +1,557 @@
+"""Data-driven firefighting RL environment using real Camp Fire VIIRS data.
+
+Fire spread follows the precomputed fire_arrival grid derived from VIIRS
+satellite observations (FEDS dataset). Fire advances proportionally — cells
+are distributed evenly across sub-steps within each fire timestep to avoid
+visual/temporal jumps.
+
+Multi-agent support: multiple fire engines start from real fire station
+locations. Each agent has a time budget per fire timestep (180 min for
+3-hour steps). Movement on roads is fast (5 min/cell), off-road is slow
+(15 min/cell), and building mitigation consumes significant time.
+
+Reward:
+  - Area penalty: -proportion of total cells burned/burning
+  - Population penalty: -1,000,000 × population of newly burned pixels
+  - Timestep penalty: -1000 per agent step
+"""
+import copy
+import json
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
+
+import numpy as np
+from gymnasium import spaces
+from gymnasium.envs.registration import EnvSpec
+from scipy.ndimage import distance_transform_edt
+
+from environment.base_env import BaseFireEnv
+from environment.observation_builder import ObservationBuilder
+from fire_sim.sim_interface import FireSimInterface
+from reward.reward_functions import data_driven_reward
+
+# BurnStatus values
+UNBURNED = 0
+BURNING = 1
+BURNED = 2
+FIRELINE = 3
+SCRATCHLINE = 4
+WETLINE = 5
+
+MITIGATION_MAP: Dict[str, int] = {
+    "fireline": FIRELINE,
+    "scratchline": SCRATCHLINE,
+    "wetline": WETLINE,
+}
+
+# Time costs in minutes per action
+MOVE_TIME_ROAD = 5.0       # 375m at ~45 km/hr
+MOVE_TIME_OFFROAD = 15.0   # 375m at ~25 km/hr effective
+BUILD_TIME: Dict[str, float] = {
+    "fireline": 45.0,      # 375m at bulldozer rate ~500 m/hr
+    "scratchline": 30.0,   # lighter construction
+    "wetline": 20.0,       # spray-based, fastest
+}
+
+
+class DataDrivenFireEnv(BaseFireEnv):
+    """Gymnasium environment using real fire spread data from VIIRS observations.
+
+    Fire progresses deterministically based on the precomputed fire_arrival
+    grid. Each fire timestep (3 hours), newly burning cells are distributed
+    proportionally across agent sub-steps so fire expands gradually.
+
+    Multiple agents (fire engines) start at real fire station locations. Each
+    agent has a 180-minute time budget per fire timestep. Actions consume time
+    based on terrain (road vs off-road) and action type (move vs build).
+    """
+
+    metadata = {"render_modes": []}
+
+    def __init__(self, config: dict) -> None:
+        super().__init__()
+
+        self.screen_size: int = config.get("screen_size", 250)
+
+        # Load fire arrival data
+        data_dir = Path(config.get("data_dir", "data"))
+        arrival_path = data_dir / config.get("fire_arrival_file", "camp_fire_full_arrival_375m.npy")
+        meta_path = data_dir / config.get("fire_meta_file", "camp_fire_full_meta.json")
+
+        self.fire_arrival = np.load(arrival_path)
+        with open(meta_path) as f:
+            self.fire_meta = json.load(f)
+
+        grid_rows = self.fire_meta.get("grid_rows", self.fire_arrival.shape[0])
+        grid_cols = self.fire_meta.get("grid_cols", self.fire_arrival.shape[1])
+        self.grid_rows = grid_rows
+        self.grid_cols = grid_cols
+
+        assert self.fire_arrival.shape == (grid_rows, grid_cols), \
+            f"fire_arrival shape {self.fire_arrival.shape} != ({grid_rows}, {grid_cols})"
+
+        self.max_fire_timestep = int(self.fire_arrival.max())
+        self.hours_per_timestep = self.fire_meta.get("hours_per_timestep", 3.0)
+        self.time_budget = self.hours_per_timestep * 60.0  # minutes per fire timestep
+
+        # Load roads grid
+        roads_path = data_dir / config.get("roads_file", "camp_fire_roads_375m.npy")
+        if roads_path.exists():
+            self.roads_grid = np.load(roads_path)
+        else:
+            self.roads_grid = np.zeros((grid_rows, grid_cols), dtype=np.int8)
+
+        # Load population grid
+        pop_path = data_dir / config.get("population_file", "camp_fire_population_375m.npy")
+        if pop_path.exists():
+            self.population_grid = np.load(pop_path).astype(np.float32)
+        else:
+            self.population_grid = np.zeros((grid_rows, grid_cols), dtype=np.float32)
+
+        # Load fire stations
+        stations_path = data_dir / config.get("stations_file", "camp_fire_stations.json")
+        if stations_path.exists():
+            with open(stations_path) as f:
+                all_stations = json.load(f)
+            self.stations = [s for s in all_stations if s.get("in_grid", False)]
+        else:
+            self.stations = []
+
+        # If no stations in grid, create entry points from nearest out-of-grid stations
+        if not self.stations and stations_path.exists():
+            with open(stations_path) as f:
+                all_stations = json.load(f)
+            self.stations = self._create_entry_stations(all_stations)
+
+        # Config
+        self.attributes: List[str] = list(config.get("attributes", [
+            "fire_map", "elevation", "w_0", "sigma", "delta", "M_x"
+        ]))
+        _norm_attrs: List[str] = list(config.get("normalized_attributes", [
+            "elevation", "w_0", "sigma", "delta", "M_x"
+        ]))
+        if "fire_map" not in _norm_attrs:
+            _norm_attrs = ["fire_map"] + _norm_attrs
+        self.normalized_attributes = _norm_attrs
+
+        self.initial_pos: List[int] = list(config.get("initial_pos", [15, 15]))
+        self.max_episode_steps: int = config.get("max_episode_steps", 5000)
+
+        movements: List[str] = list(config.get("movements", ["up", "down", "left", "right"]))
+        interactions: List[str] = list(config.get("interactions", ["fireline"]))
+        self.movements: List[str] = ["none"] + movements
+        self.interactions: List[str] = ["none"] + interactions
+
+        max_mitigation = max(
+            (MITIGATION_MAP.get(name, FIRELINE) for name in interactions),
+            default=FIRELINE,
+        )
+        self.sim_agent_id: int = max_mitigation + 2
+
+        # Count total agents (trucks) across all in-grid stations
+        self.num_agents = sum(s.get("trucks", 1) for s in self.stations)
+        if self.num_agents == 0:
+            self.num_agents = 1  # fallback single agent
+
+        # Actions per agent step: each agent picks (movement, interaction)
+        self.actions_per_agent = len(self.movements) * len(self.interactions)
+
+        # Pre-compute proportional fire spread schedule
+        self._precompute_fire_schedule(config)
+
+        # Build SimFire for terrain observations only
+        sim_config = FireSimInterface.build_config_dict(
+            screen_size=max(grid_rows, grid_cols),
+            terrain_type=config.get("terrain_type", "operational"),
+            latitude=config.get("latitude", self.fire_meta.get("lat_min", 39.58)),
+            longitude=config.get("longitude", self.fire_meta.get("lon_min", -121.79)),
+            resolution=config.get("resolution", 30),
+            landfire_year=config.get("landfire_year", 2020),
+            pixel_scale=config.get("pixel_scale", 12),
+            ros_attenuation=config.get("ros_attenuation", True),
+            wind_speed=config.get("wind_speed", 2),
+            wind_direction=config.get("wind_direction", 135.0),
+            moisture=config.get("moisture", 0.03),
+            fire_position_type="static",
+            max_fire_duration=100,
+        )
+        self.sim = FireSimInterface(sim_config)
+
+        # Normalisation bounds
+        raw_bounds = dict(self.sim.get_attribute_bounds())
+        self.min_maxes: Dict[str, Dict[str, float]] = {}
+        for attr in self.attributes:
+            if attr == "fire_map":
+                self.min_maxes[attr] = {"min": 0, "max": float(self.sim_agent_id)}
+            elif attr in raw_bounds:
+                self.min_maxes[attr] = {
+                    "min": float(raw_bounds[attr]["min"]),
+                    "max": float(raw_bounds[attr]["max"]),
+                }
+            else:
+                self.min_maxes[attr] = {"min": 0.0, "max": 1.0}
+
+        # Spaces — sequential multi-agent: one action per step for current agent
+        num_attrs = len(self.attributes)
+        self.observation_space = spaces.Box(
+            low=0.0, high=1.0,
+            shape=(grid_rows, grid_cols, num_attrs),
+            dtype=np.float32,
+        )
+        self.action_space = spaces.Discrete(self.actions_per_agent)
+
+        # Observation builder
+        self.obs_builder = ObservationBuilder(
+            sim_interface=self.sim,
+            attributes=self.attributes,
+            normalized_attributes=self.normalized_attributes,
+            min_maxes=self.min_maxes,
+        )
+
+        self.spec = EnvSpec(
+            id="DataFireEnv-v0",
+            entry_point="environment.data_fire_env:DataDrivenFireEnv",
+            max_episode_steps=self.max_episode_steps,
+        )
+
+        # State (set properly in reset)
+        self.agents: List[Dict[str, Any]] = []
+        self.current_agent_idx: int = 0
+        self.num_steps: int = 0
+        self.fire_timestep: int = 0
+        self.fire_sub_step: int = 0  # sub-step within current fire timestep
+        self.fire_map: np.ndarray = np.zeros((grid_rows, grid_cols), dtype=int)
+        self.prev_burned_mask: np.ndarray = np.zeros((grid_rows, grid_cols), dtype=bool)
+        self._is_active: bool = True
+
+    # ------------------------------------------------------------------
+    # Pre-computation
+    # ------------------------------------------------------------------
+
+    def _precompute_fire_schedule(self, config: dict) -> None:
+        """Pre-compute which cells ignite at each sub-step for proportional spread.
+
+        For each fire timestep t, cells with arrival==t are sorted by distance
+        from the t-1 fire perimeter and distributed evenly across sub-steps.
+        """
+        # Number of agent actions per fire timestep (across all agents)
+        # Each agent gets time_budget worth of actions; fire advances once
+        # all agents have exhausted their budget for this timestep
+        self.actions_per_fire_step = config.get("actions_per_fire_step", 36)
+
+        self.fire_schedule: Dict[int, List[List[Tuple[int, int]]]] = {}
+
+        for t in range(0, self.max_fire_timestep + 1):
+            cells = np.argwhere(self.fire_arrival == t)
+            if len(cells) == 0:
+                self.fire_schedule[t] = []
+                continue
+
+            if t == 0:
+                # First timestep: all cells ignite at once
+                self.fire_schedule[t] = [list(map(tuple, cells))]
+                continue
+
+            # Sort cells by distance from previous fire front
+            prev_fire = (self.fire_arrival < t) & (self.fire_arrival >= 0)
+            if np.any(prev_fire):
+                dist = distance_transform_edt(~prev_fire)
+                distances = dist[cells[:, 0], cells[:, 1]]
+                order = np.argsort(distances)
+                cells = cells[order]
+
+            # Distribute cells across sub-steps
+            n_sub = self.actions_per_fire_step
+            batches: List[List[Tuple[int, int]]] = []
+            if len(cells) <= n_sub:
+                # Fewer cells than sub-steps: one cell per batch, rest empty
+                for cell in cells:
+                    batches.append([(int(cell[0]), int(cell[1]))])
+            else:
+                # Split evenly
+                splits = np.array_split(cells, n_sub)
+                for split in splits:
+                    batches.append([(int(r), int(c)) for r, c in split])
+
+            self.fire_schedule[t] = batches
+
+    def _create_entry_stations(self, all_stations: list) -> list:
+        """Create virtual entry stations from nearest out-of-grid stations."""
+        center_lat = (self.fire_meta["lat_min"] + self.fire_meta["lat_max"]) / 2
+        center_lon = (self.fire_meta["lon_min"] + self.fire_meta["lon_max"]) / 2
+
+        out_of_grid = [s for s in all_stations if not s.get("in_grid", False)]
+        if not out_of_grid:
+            return [{"name": "default", "grid_row": 0, "grid_col": 0, "trucks": 1, "in_grid": True}]
+
+        # Sort by distance to grid center
+        for s in out_of_grid:
+            s["_dist"] = ((s["lat"] - center_lat) ** 2 + (s["lon"] - center_lon) ** 2) ** 0.5
+
+        out_of_grid.sort(key=lambda s: s["_dist"])
+        nearest = out_of_grid[:2]
+
+        entry_stations = []
+        for s in nearest:
+            # Determine direction from center
+            dlat = s["lat"] - center_lat
+            dlon = s["lon"] - center_lon
+
+            # Find entry row/col on grid edge
+            if abs(dlat) > abs(dlon):
+                entry_row = 0 if dlat > 0 else self.grid_rows - 1
+                # Map lon to col
+                col_frac = (s["lon"] - self.fire_meta["lon_min"]) / (self.fire_meta["lon_max"] - self.fire_meta["lon_min"])
+                entry_col = max(0, min(self.grid_cols - 1, int(col_frac * self.grid_cols)))
+            else:
+                entry_col = 0 if dlon < 0 else self.grid_cols - 1
+                row_frac = (self.fire_meta["lat_max"] - s["lat"]) / (self.fire_meta["lat_max"] - self.fire_meta["lat_min"])
+                entry_row = max(0, min(self.grid_rows - 1, int(row_frac * self.grid_rows)))
+
+            # Snap to nearest road cell on that edge
+            if self.roads_grid is not None:
+                entry_row, entry_col = self._snap_to_road(entry_row, entry_col)
+
+            entry_stations.append({
+                "name": f"Entry from {s['name']}",
+                "grid_row": entry_row,
+                "grid_col": entry_col,
+                "trucks": s.get("trucks", 1),
+                "in_grid": True,
+            })
+
+        return entry_stations
+
+    def _snap_to_road(self, row: int, col: int, search_radius: int = 10) -> Tuple[int, int]:
+        """Find the nearest road cell to (row, col)."""
+        best_r, best_c = row, col
+        best_dist = float("inf")
+        for dr in range(-search_radius, search_radius + 1):
+            for dc in range(-search_radius, search_radius + 1):
+                r, c = row + dr, col + dc
+                if 0 <= r < self.grid_rows and 0 <= c < self.grid_cols:
+                    if self.roads_grid[r, c] > 0:
+                        d = dr * dr + dc * dc
+                        if d < best_dist:
+                            best_dist = d
+                            best_r, best_c = r, c
+        return best_r, best_c
+
+    # ------------------------------------------------------------------
+    # Gymnasium interface
+    # ------------------------------------------------------------------
+
+    def reset(
+        self,
+        *,
+        seed: Optional[int] = None,
+        options: Optional[Dict[str, Any]] = None,
+    ) -> Tuple[np.ndarray, Dict[str, Any]]:
+        super().reset(seed=seed)
+
+        # Reset SimFire (for terrain data)
+        self.sim.reset()
+
+        # Initialize agents at fire station positions
+        self.agents = []
+        for station in self.stations:
+            for truck_idx in range(station.get("trucks", 1)):
+                self.agents.append({
+                    "pos": [station["grid_row"], station["grid_col"]],
+                    "station": station.get("name", "unknown"),
+                    "truck_id": truck_idx,
+                    "time_remaining": self.time_budget,
+                })
+
+        # Fallback: if no stations, place single agent at initial_pos
+        if not self.agents:
+            self.agents = [{
+                "pos": copy.copy(self.initial_pos),
+                "station": "default",
+                "truck_id": 0,
+                "time_remaining": self.time_budget,
+            }]
+            self.num_agents = 1
+
+        self.current_agent_idx = 0
+        self.num_steps = 0
+        self.fire_timestep = 0
+        self.fire_sub_step = 0
+        self._is_active = True
+
+        # Build initial fire_map
+        self.fire_map = np.full((self.grid_rows, self.grid_cols), UNBURNED, dtype=int)
+        self.prev_burned_mask = np.zeros((self.grid_rows, self.grid_cols), dtype=bool)
+
+        # Ignite timestep 0 cells
+        self._ignite_full_timestep(0)
+
+        # For compatibility, set agent_pos to first agent
+        self.agent_pos = self.agents[0]["pos"]
+
+        obs = self._build_observation()
+        return obs, {}
+
+    def step(self, action: int) -> Tuple[np.ndarray, float, bool, bool, Dict[str, Any]]:
+        agent = self.agents[self.current_agent_idx]
+
+        # Decode action
+        movement_idx = action % len(self.movements)
+        interaction_idx = action // len(self.movements)
+        movement_str = self.movements[movement_idx]
+        interaction_str = self.interactions[interaction_idx]
+
+        # Compute movement time cost
+        move_cost = 0.0
+        new_pos = list(agent["pos"])
+        if movement_str != "none":
+            if movement_str == "up":
+                new_pos[0] = max(0, new_pos[0] - 1)
+            elif movement_str == "down":
+                new_pos[0] = min(self.grid_rows - 1, new_pos[0] + 1)
+            elif movement_str == "left":
+                new_pos[1] = max(0, new_pos[1] - 1)
+            elif movement_str == "right":
+                new_pos[1] = min(self.grid_cols - 1, new_pos[1] + 1)
+
+            # Check if actually moved (not clamped at boundary)
+            if new_pos != list(agent["pos"]):
+                on_road = self.roads_grid[new_pos[0], new_pos[1]] > 0
+                move_cost = MOVE_TIME_ROAD if on_road else MOVE_TIME_OFFROAD
+
+        # Compute interaction time cost
+        build_cost = 0.0
+        if interaction_str != "none":
+            build_cost = BUILD_TIME.get(interaction_str, 45.0)
+
+        total_cost = move_cost + build_cost
+
+        # Only execute action if agent has enough time remaining
+        if total_cost <= agent["time_remaining"] + 0.01:  # small epsilon for float
+            # Move agent
+            if move_cost > 0:
+                agent["pos"] = new_pos
+
+            # Place mitigation on unburned cells
+            cell_value = self.fire_map[agent["pos"][0], agent["pos"][1]]
+            if cell_value == UNBURNED and interaction_str != "none":
+                mitigation_type = MITIGATION_MAP.get(interaction_str, FIRELINE)
+                self.fire_map[agent["pos"][0], agent["pos"][1]] = mitigation_type
+
+            agent["time_remaining"] -= total_cost
+        # else: action rejected, agent stays put
+
+        # Advance to next agent
+        self.current_agent_idx = (self.current_agent_idx + 1) % self.num_agents
+
+        # When all agents have had a turn, advance fire by one sub-step
+        reward = 0.0
+        if self.current_agent_idx == 0:
+            # Save burned state before fire advance
+            self.prev_burned_mask = (self.fire_map == BURNED) | (self.fire_map == BURNING)
+
+            # Advance fire by one sub-step
+            self._advance_fire_substep()
+
+            # Compute reward on fire advance
+            total_cells = self.grid_rows * self.grid_cols
+            reward += data_driven_reward(
+                self.fire_map, self.population_grid,
+                self.prev_burned_mask, total_cells,
+            )
+
+            # Check if we should advance to next fire timestep
+            self.fire_sub_step += 1
+            batches = self.fire_schedule.get(self.fire_timestep, [])
+            if self.fire_sub_step >= max(len(batches), self.actions_per_fire_step):
+                # Transition BURNING -> BURNED before next timestep
+                self._transition_burning_to_burned()
+                self.fire_timestep += 1
+                self.fire_sub_step = 0
+
+                # Reset all agents' time budgets
+                for a in self.agents:
+                    a["time_remaining"] = self.time_budget
+
+                # Check termination
+                if self.fire_timestep > self.max_fire_timestep:
+                    self._is_active = False
+
+        # Timestep penalty every step
+        reward += -1000.0
+
+        # Update agent_pos for compatibility
+        self.agent_pos = self.agents[0]["pos"]
+
+        obs = self._build_observation()
+
+        self.num_steps += 1
+        truncated = self.num_steps >= self.max_episode_steps
+        terminated = not self._is_active
+
+        info = {
+            "num_steps": self.num_steps,
+            "fire_timestep": self.fire_timestep,
+            "fire_sub_step": self.fire_sub_step,
+            "current_agent": self.current_agent_idx,
+            "num_agents": self.num_agents,
+        }
+        return obs, reward, terminated, truncated, info
+
+    def render(self) -> None:
+        pass
+
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
+
+    def _build_observation(self, fire_map_override=None) -> np.ndarray:
+        obs_fire_map = np.copy(self.fire_map)
+        # Stamp all agent positions
+        for i, agent in enumerate(self.agents):
+            obs_fire_map[agent["pos"][0], agent["pos"][1]] = self.sim_agent_id
+
+        # Get terrain data from sim and crop to grid size
+        attr_data = dict(self.sim.get_attribute_data())
+        for key in attr_data:
+            arr = np.asarray(attr_data[key], dtype=np.float32)
+            if arr.shape != (self.grid_rows, self.grid_cols):
+                attr_data[key] = arr[:self.grid_rows, :self.grid_cols]
+
+        # Override fire_map
+        attr_data["fire_map"] = obs_fire_map
+
+        # Normalise
+        for attr in self.normalized_attributes:
+            if attr in attr_data and attr in self.min_maxes:
+                bounds = self.min_maxes[attr]
+                arr = attr_data[attr].astype(np.float32)
+                denom = bounds["max"] - bounds["min"]
+                if denom == 0:
+                    attr_data[attr] = np.zeros_like(arr)
+                else:
+                    attr_data[attr] = np.clip((arr - bounds["min"]) / denom, 0.0, 1.0)
+
+        channels = []
+        for attr in self.attributes:
+            channels.append(np.asarray(attr_data[attr], dtype=np.float32))
+
+        return np.stack(channels, axis=-1).astype(np.float32)
+
+    def _ignite_full_timestep(self, t: int) -> None:
+        """Ignite all cells for a given fire timestep at once."""
+        newly_burning = (self.fire_arrival == t) & (self.fire_map == UNBURNED)
+        self.fire_map[newly_burning] = BURNING
+
+    def _advance_fire_substep(self) -> None:
+        """Ignite the next batch of cells for the current fire timestep."""
+        batches = self.fire_schedule.get(self.fire_timestep, [])
+        if self.fire_sub_step < len(batches):
+            for r, c in batches[self.fire_sub_step]:
+                if self.fire_map[r, c] == UNBURNED:
+                    self.fire_map[r, c] = BURNING
+
+    def _transition_burning_to_burned(self) -> None:
+        """Transition all BURNING cells to BURNED."""
+        was_burning = self.fire_map == BURNING
+        self.fire_map[was_burning] = BURNED

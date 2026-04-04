@@ -1,6 +1,22 @@
-# Fire environment configuration
-screen_size: 64
+# Data-driven fire environment configuration (Camp Fire, VIIRS data)
+data_dir: data
+fire_arrival_file: camp_fire_full_arrival_375m.npy
+fire_meta_file: camp_fire_full_meta.json
+roads_file: camp_fire_roads_375m.npy
+population_file: camp_fire_population_375m.npy
+stations_file: camp_fire_stations.json
+
+# Terrain (SimFire for elevation/fuel observations only)
+terrain_type: functional   # functional = no LANDFIRE download needed
 pixel_scale: 12
+resolution: 30
+landfire_year: 2020
+ros_attenuation: true
+wind_speed: 2
+wind_direction: 135.0
+moisture: 0.03
+
+# Observation channels
 attributes:
   - fire_map
   - elevation
@@ -14,11 +30,9 @@ normalized_attributes:
   - sigma
   - delta
   - M_x
-terrain_type: functional   # functional (no download) or operational (LANDFIRE)
-wind_speed: 2
-wind_direction: 135.0
-moisture: 0.03
-fire_position_type: random  # static or random
-max_fire_duration: 4
-headless: true
-max_episode_steps: 2000
+
+# Episode settings
+max_episode_steps: 10000
+
+# Fire timing: 36 agent sub-steps per 3-hour fire timestep (for proportional spread)
+actions_per_fire_step: 36

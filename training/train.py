@@ -11,8 +11,7 @@ import numpy as np
 import yaml
 
 from agents.dqn_agent import DQNAgent
-from agents.ppo_agent import PPOAgent
-from environment.fire_env import FireEnv
+from environment.data_fire_env import DataDrivenFireEnv
 from training.callbacks import CheckpointCallback, EvalCallback
 from training.evaluate import evaluate_agent
 from utils.logger import WandbLogger, SB3WandbCallback, GifRecorderCallback
@@ -28,6 +27,7 @@ def train(
     config_dir: str = "config/",
     algorithm: Optional[str] = None,
     total_timesteps: Optional[int] = None,
+    resume_from: Optional[str] = None,
 ) -> None:
     """End-to-end training pipeline with W&B tracking.
 
@@ -89,7 +89,7 @@ def train(
         # ------------------------------------------------------------------
         # 3. Build environment
         # ------------------------------------------------------------------
-        env = FireEnv(merged_env_cfg)
+        env = DataDrivenFireEnv(merged_env_cfg)
 
         # ------------------------------------------------------------------
         # 4. Build agent
@@ -107,12 +107,26 @@ def train(
             "verbose": int(train_cfg.get("verbose", 1)),
         }
 
-        if algo_name == "DQN":
-            agent = DQNAgent(env, agent_model_cfg)
-        elif algo_name == "PPO":
-            agent = PPOAgent(env, agent_model_cfg)
-        else:
-            raise ValueError(f"Unknown algorithm '{algo_name}'.")
+        if algo_name != "DQN":
+            raise ValueError(f"Unknown algorithm '{algo_name}'. Only 'DQN' is supported.")
+        agent = DQNAgent(env, agent_model_cfg)
+
+        # Resume from checkpoint if specified
+        resume_step = 0
+        if resume_from is not None:
+            print(f"[train] Resuming from checkpoint: {resume_from}")
+            agent.load(resume_from)
+            # Parse step count from filename like "reference_agent_20000_steps.zip"
+            import re
+            m = re.search(r"_(\d+)_steps", resume_from)
+            if m:
+                resume_step = int(m.group(1))
+            remaining = timesteps - resume_step
+            if remaining <= 0:
+                print(f"[train] Already completed {resume_step} steps (target {timesteps}). Nothing to do.")
+                return
+            timesteps = remaining
+            print(f"[train] Resuming from step {resume_step}, {timesteps} steps remaining")
 
         # ------------------------------------------------------------------
         # 5. Build callbacks
@@ -125,7 +139,7 @@ def train(
             wandb_logger=logger,
         )
         gif_cb = GifRecorderCallback(
-            env_config=merged_env_cfg,
+            train_env=env,
             wandb_logger=logger,
             gif_freq=gif_freq,
         )
@@ -152,7 +166,7 @@ def train(
         # 8. Evaluate
         # ------------------------------------------------------------------
         print(f"[train] Running evaluation over {eval_episodes} episodes …")
-        eval_env = FireEnv(merged_env_cfg)
+        eval_env = DataDrivenFireEnv(merged_env_cfg)
         eval_results = evaluate_agent(agent, eval_env, num_episodes=eval_episodes)
         print(
             f"[train] Eval results: "
@@ -188,7 +202,7 @@ def train(
             import tempfile
             from PIL import Image as PILImage
 
-            gif_env = FireEnv(merged_env_cfg)
+            gif_env = DataDrivenFireEnv(merged_env_cfg)
             obs, _ = gif_env.reset()
             done = False
             total_reward = 0.0
@@ -202,20 +216,24 @@ def train(
                 done = terminated or truncated
                 step_count += 1
 
-                if step_count % 9 == 0 or done:
-                    fire_map = np.copy(gif_env.sim.fire_map)
-                    ap = gif_env.agent_pos
+                if step_count % max(1, gif_env.num_agents) == 0 or done:
+                    fire_map = np.copy(gif_env.fire_map)
                     h, w = fire_map.shape
                     rgb = np.zeros((h, w, 3), dtype=np.uint8)
                     rgb[fire_map == 0] = [34, 139, 34]
                     rgb[fire_map == 1] = [255, 50, 0]
                     rgb[fire_map == 2] = [80, 80, 80]
                     rgb[fire_map == 3] = [0, 120, 255]
-                    for di in [-1, 0, 1]:
-                        for dj in [-1, 0, 1]:
-                            r, c = ap[0] + di, ap[1] + dj
-                            if 0 <= r < h and 0 <= c < w:
-                                rgb[r, c] = [255, 255, 0]
+                    rgb[fire_map == 4] = [255, 165, 0]
+                    rgb[fire_map == 5] = [0, 200, 200]
+                    # All agent (fire truck) positions in yellow
+                    for ag in gif_env.agents:
+                        ap = ag["pos"]
+                        for di in [-1, 0, 1]:
+                            for dj in [-1, 0, 1]:
+                                r, c = ap[0] + di, ap[1] + dj
+                                if 0 <= r < h and 0 <= c < w:
+                                    rgb[r, c] = [255, 255, 0]
                     img = PILImage.fromarray(rgb).resize((w * 4, h * 4), PILImage.NEAREST)
                     frames.append(img)
 

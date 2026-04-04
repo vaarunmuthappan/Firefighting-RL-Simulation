@@ -3,7 +3,7 @@
 This module isolates the SimFire dependency so that the simulation backend
 can be swapped by only modifying this file.
 """
-from typing import Dict, Tuple
+from typing import Dict, Optional, Tuple
 
 import numpy as np
 from simfire.sim.simulation import FireSimulation
@@ -51,7 +51,7 @@ class FireSimInterface:
         Args:
             x: Column coordinate (note: SimFire uses (col, row, agent_id) ordering).
             y: Row coordinate.
-            mitigation_type: Integer BurnStatus value (3 = FIRELINE by default).
+            mitigation_type: Integer BurnStatus value (3=FIRELINE, 4=SCRATCHLINE, 5=WETLINE).
         """
         self._sim.update_mitigation([(x, y, mitigation_type)])
 
@@ -103,6 +103,11 @@ class FireSimInterface:
         return self._sim.fire_map
 
     @property
+    def rate_of_spread(self) -> np.ndarray:
+        """Current 2D rate-of-spread grid (ft/min per cell) from the fire manager."""
+        return self._sim.fire_manager.rate_of_spread
+
+    @property
     def rendering(self) -> bool:
         """Whether pygame rendering is enabled."""
         return self._sim.rendering
@@ -135,22 +140,35 @@ class FireSimInterface:
         terrain_type: str = "functional",
         max_fire_duration: int = 4,
         pixel_scale: int = 12,
+        ros_attenuation: bool = False,
+        latitude: float = 33.03,
+        longitude: float = -116.66,
+        resolution: int = 30,
+        landfire_year: int = 2020,
     ) -> dict:
-        """Build the full SimFire config dictionary for functional terrain.
+        """Build the full SimFire config dictionary.
 
         Args:
             screen_size: Side length of the square simulation grid.
             wind_speed: Wind speed in m/s.
             wind_direction: Wind direction in degrees.
-            moisture: Dead fuel moisture content (0–1).
+            moisture: Dead fuel moisture content (0-1).
             fire_position_type: "random" or "static".
             terrain_type: "functional" (no download) or "operational" (LANDFIRE).
             max_fire_duration: Maximum number of simulation timesteps.
             pixel_scale: Real-world meters per pixel.
+            ros_attenuation: Enable per-mitigation-type rate-of-spread reduction.
+            latitude: Latitude for operational LANDFIRE data.
+            longitude: Longitude for operational LANDFIRE data.
+            resolution: LANDFIRE resolution in meters (only 30 supported).
+            landfire_year: LANDFIRE data year (2019, 2020, or 2022).
 
         Returns:
             A dict suitable for Config(config_dict=...).
         """
+        topo_type = terrain_type
+        fuel_type = terrain_type
+
         return {
             "area": {
                 "screen_size": [screen_size, screen_size],
@@ -171,19 +189,19 @@ class FireSimInterface:
                 "data_type": "npy",
                 "sf_home": "/tmp/simfire_outputs",
             },
-            "mitigation": {"ros_attenuation": False},
+            "mitigation": {"ros_attenuation": ros_attenuation},
             "operational": {
                 "seed": None,
-                "latitude": 33.03,
-                "longitude": -116.66,
-                "height": 4000,
-                "width": 4000,
-                "resolution": 30,
-                "year": 2020,
+                "latitude": latitude,
+                "longitude": longitude,
+                "height": screen_size * resolution,  # SimFire expects meters
+                "width": screen_size * resolution,   # SimFire expects meters
+                "resolution": resolution,
+                "year": landfire_year,
             },
             "terrain": {
                 "topography": {
-                    "type": terrain_type,
+                    "type": topo_type,
                     "functional": {
                         "function": "perlin",
                         "perlin": {
@@ -204,7 +222,7 @@ class FireSimInterface:
                     },
                 },
                 "fuel": {
-                    "type": terrain_type,
+                    "type": fuel_type,
                     "functional": {
                         "function": "chaparral",
                         "chaparral": {"seed": 1113},

@@ -15,8 +15,6 @@ Gymnasium interface contract
     end, truncated = time-limit cut-off), and an info dict.
 - render() -> None
     Activates visual rendering of the environment.
-- _calculate_reward(fire_map) -> float
-    Internal reward computation given the current fire map.
 - _build_observation() -> np.ndarray
     Internal method that assembles and normalises the observation array.
 """
@@ -93,18 +91,6 @@ class BaseFireEnv(gym.Env, ABC):
     @abstractmethod
     def render(self) -> None:
         """Activate visual rendering of the environment."""
-        raise NotImplementedError
-
-    @abstractmethod
-    def _calculate_reward(self, fire_map: np.ndarray) -> float:
-        """Compute the step reward from the current fire map.
-
-        Args:
-            fire_map: 2D numpy array with BurnStatus values.
-
-        Returns:
-            Scalar reward value.
-        """
         raise NotImplementedError
 
     @abstractmethod
