@@ -192,10 +192,27 @@ class GifRecorderCallback(BaseCallback):
         return True
 
     def _record_and_upload(self) -> None:
-        """Record episode frames using matplotlib (no pygame display needed)."""
-        from PIL import Image as PILImage
+        """Record episode frames with full terrain layers and upload to W&B.
+
+        Rendering layers (bottom to top):
+          1. Terrain base: elevation hillshade + population heat map + roads
+          2. Fire overlay: burning (red-orange), burned (dark charcoal)
+          3. Mitigation: fireline (blue), scratchline (orange), wetline (cyan)
+          4. Fire trucks: yellow 3×3 markers
+          5. Fire stations: cyan triangles (static)
+        """
+        from PIL import Image as PILImage, ImageDraw
 
         gif_env = self.train_env
+
+        # ---- Build terrain base frame once --------------------------------
+        has_terrain = hasattr(gif_env, "build_terrain_base_rgb")
+        if has_terrain:
+            terrain_base = gif_env.build_terrain_base_rgb()  # (H, W, 3) uint8
+        else:
+            h_fb = getattr(gif_env, "grid_rows", 256)
+            w_fb = getattr(gif_env, "grid_cols", 256)
+            terrain_base = np.full((h_fb, w_fb, 3), [34, 139, 34], dtype=np.uint8)
 
         obs, _ = gif_env.reset()
         done = False
@@ -203,9 +220,11 @@ class GifRecorderCallback(BaseCallback):
         frames = []
         frame_step = 0
 
-        # Determine frame capture interval based on env type
         num_agents = getattr(gif_env, "num_agents", 1)
         frame_interval = max(1, num_agents)
+
+        # Station markers (static)
+        stations = getattr(gif_env, "stations", [])
 
         while not done:
             action, _ = self.model.predict(obs, deterministic=True)
@@ -214,41 +233,68 @@ class GifRecorderCallback(BaseCallback):
             done = terminated or truncated
             frame_step += 1
 
-            # Capture frame every num_agents steps (one full round of all agents)
             if frame_step % frame_interval == 0 or done:
-                # Support both DataDrivenFireEnv (fire_map attr) and FireEnv (sim.fire_map)
+                # ---- Start with terrain base --------------------------------
+                rgb = terrain_base.copy()
+                h, w = rgb.shape[:2]
+
+                # Support both DataDrivenFireEnv and FireEnv
                 if hasattr(gif_env, "fire_map"):
                     fire_map = np.copy(gif_env.fire_map)
                 else:
                     fire_map = np.copy(gif_env.sim.fire_map)
 
-                # Build RGB image
-                h, w = fire_map.shape
-                rgb = np.zeros((h, w, 3), dtype=np.uint8)
-                rgb[fire_map == 0] = [34, 139, 34]    # unburned = forest green
-                rgb[fire_map == 1] = [255, 50, 0]     # burning = red-orange
-                rgb[fire_map == 2] = [80, 80, 80]     # burned = dark grey
-                rgb[fire_map == 3] = [0, 120, 255]    # fireline = blue
-                rgb[fire_map == 4] = [255, 165, 0]    # scratchline = orange
-                rgb[fire_map == 5] = [0, 200, 200]    # wetline = cyan
+                # ---- Fire / burned overlay ----------------------------------
+                burning_mask = fire_map == 1
+                burned_mask  = fire_map == 2
+                # Blend burning cells: bright orange-red (alpha 0.85)
+                rgb[burning_mask] = (
+                    rgb[burning_mask] * 0.15 + np.array([255, 65, 0]) * 0.85
+                ).astype(np.uint8)
+                # Blend burned cells: dark charcoal (alpha 0.80)
+                rgb[burned_mask] = (
+                    rgb[burned_mask] * 0.20 + np.array([45, 30, 25]) * 0.80
+                ).astype(np.uint8)
 
-                # All fire truck agents = bright yellow (3x3 marker)
+                # ---- Mitigation overlay -------------------------------------
+                fl_mask = fire_map == 3   # fireline   → blue
+                sl_mask = fire_map == 4   # scratchline → orange
+                wl_mask = fire_map == 5   # wetline    → cyan
+                rgb[fl_mask] = (rgb[fl_mask] * 0.2 + np.array([0, 100, 255]) * 0.8).astype(np.uint8)
+                rgb[sl_mask] = (rgb[sl_mask] * 0.2 + np.array([255, 140, 0]) * 0.8).astype(np.uint8)
+                rgb[wl_mask] = (rgb[wl_mask] * 0.2 + np.array([0, 210, 210]) * 0.8).astype(np.uint8)
+
+                # ---- Fire truck agents: yellow 3×3 markers ------------------
                 if hasattr(gif_env, "agents"):
                     agent_positions = [ag["pos"] for ag in gif_env.agents]
                 else:
                     agent_positions = [gif_env.agent_pos]
 
                 for ap in agent_positions:
-                    for di in [-1, 0, 1]:
-                        for dj in [-1, 0, 1]:
-                            r, c = ap[0] + di, ap[1] + dj
-                            if 0 <= r < h and 0 <= c < w:
-                                rgb[r, c] = [255, 255, 0]  # yellow = fire truck
+                    for di in (-1, 0, 1):
+                        for dj in (-1, 0, 1):
+                            rr, cc = ap[0] + di, ap[1] + dj
+                            if 0 <= rr < h and 0 <= cc < w:
+                                rgb[rr, cc] = [255, 220, 0]  # bright yellow
 
-                # Scale up for visibility (4x)
+                # ---- Scale up 4× (nearest-neighbour for pixel crispness) ----
+                scale = 4
                 img = PILImage.fromarray(rgb).resize(
-                    (w * 4, h * 4), PILImage.NEAREST
+                    (w * scale, h * scale), PILImage.NEAREST
                 )
+                draw = ImageDraw.Draw(img)
+
+                # Fire stations: cyan triangle markers
+                for s in stations:
+                    sr, sc = s.get("grid_row", 0), s.get("grid_col", 0)
+                    cx = sc * scale + scale // 2
+                    cy = sr * scale + scale // 2
+                    sz = scale * 2
+                    draw.polygon(
+                        [(cx, cy - sz), (cx - sz, cy + sz), (cx + sz, cy + sz)],
+                        fill=(0, 200, 200), outline=(255, 255, 255)
+                    )
+
                 frames.append(img)
 
         if frames:

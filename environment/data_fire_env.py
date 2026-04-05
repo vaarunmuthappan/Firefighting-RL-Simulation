@@ -518,6 +518,79 @@ class DataDrivenFireEnv(BaseFireEnv):
     # Internal helpers
     # ------------------------------------------------------------------
 
+    def build_terrain_base_rgb(self) -> np.ndarray:
+        """Return a (grid_rows, grid_cols, 3) uint8 RGB base frame showing:
+          - Elevation hillshade (light/shadow)
+          - Population density overlay (yellow → red warm tones)
+          - Roads overlay (white/grey lines)
+
+        This is computed once and can be cached; the fire/agent overlay is
+        applied on top per-frame in the GIF recorder.
+        """
+        import numpy as np
+
+        elev = np.load("data/camp_fire_elevation_375m.npy").astype(np.float32)
+        elev = elev[:self.grid_rows, :self.grid_cols]
+        elev_norm = (elev - elev.min()) / (elev.max() - elev.min() + 1e-8)
+
+        # Hillshade
+        dy, dx = np.gradient(elev)
+        slope = np.sqrt(dx ** 2 + dy ** 2)
+        aspect = np.arctan2(-dx, dy)
+        altitude_rad = np.radians(45)
+        azimuth_rad = np.radians(315)
+        shade = (np.sin(altitude_rad) * np.cos(np.arctan(slope))
+                 + np.cos(altitude_rad) * np.sin(np.arctan(slope))
+                 * np.cos(azimuth_rad - aspect))
+        shade = np.clip(shade, 0.15, 1.0)  # floor at 0.15 to avoid pitch black
+
+        # Base colour: low=green, mid=brown, high=grey (terrain-style)
+        frame = np.zeros((self.grid_rows, self.grid_cols, 3), dtype=np.float32)
+        for i in range(self.grid_rows):
+            for j in range(self.grid_cols):
+                e = float(elev_norm[i, j])
+                s = float(shade[i, j])
+                # Green → olive → brown → grey gradient with elevation
+                r = (0.35 + 0.50 * e) * s
+                g = (0.55 - 0.25 * e) * s
+                b = (0.25 + 0.20 * e) * s
+                frame[i, j] = [r, g, b]
+
+        # Population overlay: yellow (low) → orange → red (high)
+        pop = self.population_grid[:self.grid_rows, :self.grid_cols]
+        pop_max = float(pop.max()) if pop.max() > 0 else 1.0
+        for i in range(self.grid_rows):
+            for j in range(self.grid_cols):
+                if pop[i, j] > 0:
+                    p = float(pop[i, j]) / pop_max
+                    alpha = min(0.65, 0.25 + 0.40 * p)
+                    pr = min(1.0, 0.95 + 0.05 * p)
+                    pg = max(0.0, 0.85 - 0.65 * p)
+                    pb = 0.10
+                    frame[i, j, 0] = frame[i, j, 0] * (1 - alpha) + pr * alpha
+                    frame[i, j, 1] = frame[i, j, 1] * (1 - alpha) + pg * alpha
+                    frame[i, j, 2] = frame[i, j, 2] * (1 - alpha) + pb * alpha
+
+        # Roads overlay: white=primary, light-grey=secondary, grey=residential
+        road_colors_f = {
+            1: (1.0, 1.0, 1.0),
+            2: (0.78, 0.78, 0.78),
+            3: (0.65, 0.65, 0.65),
+            4: (0.55, 0.55, 0.45),
+        }
+        roads = self.roads_grid[:self.grid_rows, :self.grid_cols]
+        for i in range(self.grid_rows):
+            for j in range(self.grid_cols):
+                rt = int(roads[i, j])
+                if rt > 0:
+                    rc = road_colors_f.get(rt, (0.65, 0.65, 0.65))
+                    alpha = 0.70
+                    frame[i, j, 0] = frame[i, j, 0] * (1 - alpha) + rc[0] * alpha
+                    frame[i, j, 1] = frame[i, j, 1] * (1 - alpha) + rc[1] * alpha
+                    frame[i, j, 2] = frame[i, j, 2] * (1 - alpha) + rc[2] * alpha
+
+        return (np.clip(frame, 0, 1) * 255).astype(np.uint8)
+
     def _build_observation(self, fire_map_override=None) -> np.ndarray:
         obs_fire_map = np.copy(self.fire_map)
         # Stamp all agent positions
@@ -558,16 +631,42 @@ class DataDrivenFireEnv(BaseFireEnv):
         return full_obs
 
     def _ignite_full_timestep(self, t: int) -> None:
-        """Ignite all cells for a given fire timestep at once."""
+        """Ignite all cells for a given fire timestep at once (used for t=0 only).
+
+        No adjacency check — these are ignition-origin cells.
+        """
         newly_burning = (self.fire_arrival == t) & (self.fire_map == UNBURNED)
         self.fire_map[newly_burning] = BURNING
 
+    def _is_fire_adjacent(self, r: int, c: int) -> bool:
+        """Return True if (r, c) is 4-connected to any BURNING or BURNED cell.
+
+        This makes mitigation lines (fireline/scratchline/wetline) impassable
+        barriers: fire can only spread to cells that are adjacent to active fire,
+        so a solid wall of mitigation cells blocks all propagation beyond it.
+        """
+        for dr, dc in ((-1, 0), (1, 0), (0, -1), (0, 1)):
+            nr, nc = r + dr, c + dc
+            if 0 <= nr < self.grid_rows and 0 <= nc < self.grid_cols:
+                if self.fire_map[nr, nc] in (BURNING, BURNED):
+                    return True
+        return False
+
     def _advance_fire_substep(self) -> None:
-        """Ignite the next batch of cells for the current fire timestep."""
+        """Ignite the next batch of cells for the current fire timestep.
+
+        A cell ignites only if:
+          1. It is UNBURNED (not already on fire, burned, or mitigated), AND
+          2. At least one 4-connected neighbour is BURNING or BURNED.
+
+        This means mitigation cells (fireline/scratchline/wetline) act as
+        impassable fire barriers — fire cannot jump over or through them.
+        Cells that are only reachable through a mitigated path are protected.
+        """
         batches = self.fire_schedule.get(self.fire_timestep, [])
         if self.fire_sub_step < len(batches):
             for r, c in batches[self.fire_sub_step]:
-                if self.fire_map[r, c] == UNBURNED:
+                if self.fire_map[r, c] == UNBURNED and self._is_fire_adjacent(r, c):
                     self.fire_map[r, c] = BURNING
 
     def _transition_burning_to_burned(self) -> None:

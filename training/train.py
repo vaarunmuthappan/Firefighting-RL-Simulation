@@ -202,12 +202,16 @@ def train(
             import tempfile
             from PIL import Image as PILImage
 
+            from PIL import ImageDraw
             gif_env = DataDrivenFireEnv(merged_env_cfg)
+            terrain_base = gif_env.build_terrain_base_rgb() if hasattr(gif_env, "build_terrain_base_rgb") else None
             obs, _ = gif_env.reset()
             done = False
             total_reward = 0.0
             frames = []
             step_count = 0
+            stations = getattr(gif_env, "stations", [])
+            scale = 4
 
             while not done:
                 action = agent.get_action(obs)
@@ -219,22 +223,31 @@ def train(
                 if step_count % max(1, gif_env.num_agents) == 0 or done:
                     fire_map = np.copy(gif_env.fire_map)
                     h, w = fire_map.shape
-                    rgb = np.zeros((h, w, 3), dtype=np.uint8)
-                    rgb[fire_map == 0] = [34, 139, 34]
-                    rgb[fire_map == 1] = [255, 50, 0]
-                    rgb[fire_map == 2] = [80, 80, 80]
-                    rgb[fire_map == 3] = [0, 120, 255]
-                    rgb[fire_map == 4] = [255, 165, 0]
-                    rgb[fire_map == 5] = [0, 200, 200]
-                    # All agent (fire truck) positions in yellow
+                    rgb = terrain_base.copy() if terrain_base is not None else np.zeros((h, w, 3), dtype=np.uint8)
+                    # Fire overlay
+                    burning_mask = fire_map == 1
+                    burned_mask  = fire_map == 2
+                    rgb[burning_mask] = (rgb[burning_mask] * 0.15 + np.array([255, 65, 0]) * 0.85).astype(np.uint8)
+                    rgb[burned_mask]  = (rgb[burned_mask]  * 0.20 + np.array([45, 30, 25]) * 0.80).astype(np.uint8)
+                    # Mitigation
+                    rgb[fire_map == 3] = (rgb[fire_map == 3] * 0.2 + np.array([0, 100, 255]) * 0.8).astype(np.uint8)
+                    rgb[fire_map == 4] = (rgb[fire_map == 4] * 0.2 + np.array([255, 140, 0]) * 0.8).astype(np.uint8)
+                    rgb[fire_map == 5] = (rgb[fire_map == 5] * 0.2 + np.array([0, 210, 210]) * 0.8).astype(np.uint8)
+                    # Yellow agents
                     for ag in gif_env.agents:
                         ap = ag["pos"]
                         for di in [-1, 0, 1]:
                             for dj in [-1, 0, 1]:
                                 r, c = ap[0] + di, ap[1] + dj
                                 if 0 <= r < h and 0 <= c < w:
-                                    rgb[r, c] = [255, 255, 0]
-                    img = PILImage.fromarray(rgb).resize((w * 4, h * 4), PILImage.NEAREST)
+                                    rgb[r, c] = [255, 220, 0]
+                    img = PILImage.fromarray(rgb).resize((w * scale, h * scale), PILImage.NEAREST)
+                    draw = ImageDraw.Draw(img)
+                    for s in stations:
+                        cx = s.get("grid_col", 0) * scale + scale // 2
+                        cy = s.get("grid_row", 0) * scale + scale // 2
+                        sz = scale * 2
+                        draw.polygon([(cx, cy - sz), (cx - sz, cy + sz), (cx + sz, cy + sz)], fill=(0, 200, 200), outline=(255, 255, 255))
                     frames.append(img)
 
             if frames:
