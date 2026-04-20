@@ -39,34 +39,48 @@ _CROSS_KERNEL = np.array([[0, 1, 0],
 # Data-driven reward (DataDrivenFireEnv)
 # ---------------------------------------------------------------------------
 
+# def data_driven_reward(
+#     fire_map: np.ndarray,
+#     population_grid: np.ndarray,
+#     prev_burned_mask: np.ndarray,
+#     total_cells: int,
+# ) -> float:
+#     """Reward for the data-driven fire environment.
+
+#     Args:
+#         fire_map: 2D array with BurnStatus values.
+#         population_grid: 2D float array of population per cell.
+#         prev_burned_mask: Boolean 2D array — True for cells that were already
+#             burned/burning BEFORE this fire advance.
+#         total_cells: Total number of cells in the grid (rows × cols).
+
+#     Returns:
+#         Scalar reward (area penalty + population penalty).
+#         Timestep penalty is applied separately in env.step().
+#     """
+#     burned_mask = (fire_map == _BURNED) | (fire_map == _BURNING)
+#     proportion_burned = float(np.sum(burned_mask)) / total_cells
+#     area_penalty = -proportion_burned
+
+#     newly_burned = burned_mask & ~prev_burned_mask
+#     pop_penalty = -1_000_000.0 * float(np.sum(population_grid[newly_burned]))
+#     pop_penalty = -100.0 * float(np.sum(population_grid[newly_burned]))
+#     return area_penalty + pop_penalty
+
 def data_driven_reward(
     fire_map: np.ndarray,
     population_grid: np.ndarray,
     prev_burned_mask: np.ndarray,
     total_cells: int,
 ) -> float:
-    """Reward for the data-driven fire environment.
-
-    Args:
-        fire_map: 2D array with BurnStatus values.
-        population_grid: 2D float array of population per cell.
-        prev_burned_mask: Boolean 2D array — True for cells that were already
-            burned/burning BEFORE this fire advance.
-        total_cells: Total number of cells in the grid (rows × cols).
-
-    Returns:
-        Scalar reward (area penalty + population penalty).
-        Timestep penalty is applied separately in env.step().
-    """
-    burned_mask = (fire_map == _BURNED) | (fire_map == _BURNING)
+    burned_mask = (fire_map == 2) | (fire_map == 1)
     proportion_burned = float(np.sum(burned_mask)) / total_cells
-    area_penalty = -proportion_burned
+    area_penalty = -10.0 * proportion_burned
 
     newly_burned = burned_mask & ~prev_burned_mask
-    pop_penalty = -1_000_000.0 * float(np.sum(population_grid[newly_burned]))
+    pop_penalty = -1000.0 * float(np.sum(population_grid[newly_burned]))
 
     return area_penalty + pop_penalty
-
 
 # ---------------------------------------------------------------------------
 # SimFire reward (FireEnv) — backwards compatible
