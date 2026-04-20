@@ -1,25 +1,56 @@
+# # Training configuration — Camp Fire data-driven multi-agent
+# algorithm: DQN
+# policy: CnnPolicy          # CnnPolicy for spatial obs (26x27x6 after 4x downsample)
+# total_timesteps: 200000
+# learning_rate: 0.0001
+# batch_size: 32
+# gamma: 0.99
+# buffer_size: 10000         # 10k * 26*27*6*4bytes*2 = ~337MB (manageable)
+# train_freq: 4
+# target_update_interval: 1000
+# exploration_fraction: 0.3
+# exploration_final_eps: 0.05
+# checkpoint_dir: checkpoints/
+# checkpoint_freq: 20000
+# eval_freq: 20000
+# eval_episodes: 3
+# experiment_name: Firefighting-RL-DataDriven
+# run_name: camp_fire_multiagent
+# verbose: 1
+
+# # W&B settings
+# wandb_project: "Firefighting RL"
+
+# # GIF recording every gif_freq steps
+# gif_freq: 20000
+
+
 # Training configuration — Camp Fire data-driven multi-agent
-algorithm: DQN
-policy: CnnPolicy          # CnnPolicy for spatial obs (26x27x6 after 4x downsample)
-total_timesteps: 200000
-learning_rate: 0.0001
-batch_size: 32
+algorithm: PPO
+policy: CnnPolicy
+
+# Main training budget
+total_timesteps: 500000
+
+# PPO hyperparameters
+learning_rate: 0.0003
+n_steps: 2048
+batch_size: 256
+n_epochs: 10
 gamma: 0.99
-buffer_size: 10000         # 10k * 26*27*6*4bytes*2 = ~337MB (manageable)
-train_freq: 4
-target_update_interval: 1000
-exploration_fraction: 0.3
-exploration_final_eps: 0.05
+gae_lambda: 0.95
+clip_range: 0.2
+
+# Logging / checkpoints
 checkpoint_dir: checkpoints/
-checkpoint_freq: 20000
-eval_freq: 20000
+checkpoint_freq: 50000
 eval_episodes: 3
 experiment_name: Firefighting-RL-DataDriven
-run_name: camp_fire_multiagent
+run_name: camp_fire_multiagent_ppo
 verbose: 1
 
 # W&B settings
 wandb_project: "Firefighting RL"
 
-# GIF recording every gif_freq steps
-gif_freq: 20000
+# GIF recording
+gif_freq: 50000

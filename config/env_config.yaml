@@ -1,3 +1,43 @@
+# # Data-driven fire environment configuration (Camp Fire, VIIRS data)
+# data_dir: data
+# fire_arrival_file: camp_fire_full_arrival_375m.npy
+# fire_meta_file: camp_fire_full_meta.json
+# roads_file: camp_fire_roads_375m.npy
+# population_file: camp_fire_population_375m.npy
+# stations_file: camp_fire_stations.json
+
+# # Terrain (SimFire for elevation/fuel observations only)
+# terrain_type: functional   # functional = no LANDFIRE download needed
+# pixel_scale: 12
+# resolution: 30
+# landfire_year: 2020
+# ros_attenuation: true
+# wind_speed: 2
+# wind_direction: 135.0
+# moisture: 0.03
+
+# # Observation channels
+# attributes:
+#   - fire_map
+#   - elevation
+#   - w_0
+#   - sigma
+#   - delta
+#   - M_x
+# normalized_attributes:
+#   - elevation
+#   - w_0
+#   - sigma
+#   - delta
+#   - M_x
+
+# # Episode settings
+# max_episode_steps: 10000
+
+# # Fire timing: 36 agent sub-steps per 3-hour fire timestep (for proportional spread)
+# actions_per_fire_step: 36
+
+
 # Data-driven fire environment configuration (Camp Fire, VIIRS data)
 data_dir: data
 fire_arrival_file: camp_fire_full_arrival_375m.npy
@@ -7,7 +47,7 @@ population_file: camp_fire_population_375m.npy
 stations_file: camp_fire_stations.json
 
 # Terrain (SimFire for elevation/fuel observations only)
-terrain_type: functional   # functional = no LANDFIRE download needed
+terrain_type: functional
 pixel_scale: 12
 resolution: 30
 landfire_year: 2020
@@ -24,6 +64,7 @@ attributes:
   - sigma
   - delta
   - M_x
+
 normalized_attributes:
   - elevation
   - w_0
@@ -34,5 +75,14 @@ normalized_attributes:
 # Episode settings
 max_episode_steps: 10000
 
-# Fire timing: 36 agent sub-steps per 3-hour fire timestep (for proportional spread)
+# Fire timing
 actions_per_fire_step: 36
+
+# Reward shaping
+step_penalty: -100.0
+invalid_action_penalty: -20.0
+useless_noop_penalty: -2.0
+mitigation_reward: 5.0
+adjacent_mitigation_reward: 20.0
+move_toward_fire_reward: 1.0
+move_away_fire_penalty: -1.0
