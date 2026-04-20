@@ -1,0 +1,137 @@
+[
+  {
+    "name": "Station Five",
+    "lat": 39.7618174,
+    "lon": -121.8055774,
+    "grid_row": 46,
+    "grid_col": -3,
+    "in_grid": false,
+    "trucks": 1
+  },
+  {
+    "name": "Butte County Fire Station 26 Honey Run",
+    "lat": 39.7290218,
+    "lon": -121.7024155,
+    "grid_row": 56,
+    "grid_col": 20,
+    "in_grid": true,
+    "trucks": 1
+  },
+  {
+    "name": "Harts Mill Station 62",
+    "lat": 39.6419788,
+    "lon": -121.4304663,
+    "grid_row": 82,
+    "grid_col": 83,
+    "in_grid": true,
+    "trucks": 1
+  },
+  {
+    "name": "South Chico Station 44",
+    "lat": 39.7170542,
+    "lon": -121.816385,
+    "grid_row": 60,
+    "grid_col": -5,
+    "in_grid": false,
+    "trucks": 1
+  },
+  {
+    "name": "Durham Station 45",
+    "lat": 39.6436587,
+    "lon": -121.8002878,
+    "grid_row": 81,
+    "grid_col": -1,
+    "in_grid": false,
+    "trucks": 1
+  },
+  {
+    "name": "Upper Ridge Station 33",
+    "lat": 39.8195037,
+    "lon": -121.592127,
+    "grid_row": 29,
+    "grid_col": 46,
+    "in_grid": true,
+    "trucks": 1
+  },
+  {
+    "name": "Jarbo Gap Station 36",
+    "lat": 39.7391066,
+    "lon": -121.4958911,
+    "grid_row": 53,
+    "grid_col": 68,
+    "in_grid": true,
+    "trucks": 1
+  },
+  {
+    "name": "Paradise Station 35",
+    "lat": 39.7856006,
+    "lon": -121.5903595,
+    "grid_row": 39,
+    "grid_col": 46,
+    "in_grid": true,
+    "trucks": 2
+  },
+  {
+    "name": "Cohasset Station 22",
+    "lat": 39.9237128,
+    "lon": -121.732165,
+    "grid_row": -1,
+    "grid_col": 13,
+    "in_grid": false,
+    "trucks": 1
+  },
+  {
+    "name": "Forest Ranch Station 23",
+    "lat": 39.9275883,
+    "lon": -121.6470276,
+    "grid_row": -2,
+    "grid_col": 33,
+    "in_grid": false,
+    "trucks": 1
+  },
+  {
+    "name": "CAL FIRE Stirling City Station 13",
+    "lat": 39.9046174,
+    "lon": -121.528276,
+    "grid_row": 4,
+    "grid_col": 60,
+    "in_grid": true,
+    "trucks": 1
+  },
+  {
+    "name": "Stirling City Fire Station 12",
+    "lat": 39.9071697,
+    "lon": -121.5280199,
+    "grid_row": 3,
+    "grid_col": 60,
+    "in_grid": true,
+    "trucks": 1
+  },
+  {
+    "name": "Paradise Fire Station #81",
+    "lat": 39.753808,
+    "lon": -121.6246097,
+    "grid_row": 49,
+    "grid_col": 38,
+    "in_grid": true,
+    "trucks": 3
+  },
+  {
+    "name": "Paradise Fire Department #82",
+    "lat": 39.7487908,
+    "lon": -121.5940019,
+    "grid_row": 50,
+    "grid_col": 45,
+    "in_grid": true,
+    "trucks": 3
+  },
+  {
+    "name": "Butte County Fire Station 38",
+    "lat": 39.7741116,
+    "lon": -121.5066697,
+    "grid_row": 43,
+    "grid_col": 65,
+    "in_grid": true,
+    "trucks": 1
+  }
+]
