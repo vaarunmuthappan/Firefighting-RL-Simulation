@@ -34,12 +34,20 @@ total_timesteps: 500000
 
 # PPO hyperparameters
 learning_rate: 0.0003
-n_steps: 2048
+# 8192 = ~4 complete episodes per rollout (max_episode_steps=2000).
+# At n_steps=2048 each rollout was ~1 episode, giving high-variance GAE
+# advantage estimates and the oscillating reward curve.
+n_steps: 8192
 batch_size: 256
 n_epochs: 10
-gamma: 0.99
+# 0.995 extends effective horizon so containment payoff (visible ~100+ steps later)
+# is not discounted away before the policy can learn from it.
+gamma: 0.995
 gae_lambda: 0.95
 clip_range: 0.2
+# Higher entropy coefficient slows premature convergence to the "hover near fire"
+# local optimum, giving the policy time to discover line-building sequences.
+ent_coef: 0.05
 
 # Logging / checkpoints
 checkpoint_dir: checkpoints/

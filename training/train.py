@@ -291,6 +291,9 @@ from typing import Optional
 import numpy as np
 import yaml
 
+from stable_baselines3.common.monitor import Monitor
+from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
+
 from agents.dqn_agent import DQNAgent
 from agents.ppo_agent import PPOAgent
 from environment.data_fire_env import DataDrivenFireEnv
@@ -372,13 +375,15 @@ def train(
         # ------------------------------------------------------------------
         # 3. Build environment
         # ------------------------------------------------------------------
-        env = DataDrivenFireEnv(merged_env_cfg)
+        # raw_env: used by GifRecorderCallback (needs .fire_map, .agents etc.)
+        # and by evaluate_agent (standard gym interface).
+        raw_env = DataDrivenFireEnv(merged_env_cfg)
+
+        policy_name = str(train_cfg.get("policy", "CnnPolicy"))
 
         # ------------------------------------------------------------------
         # 4. Build agent
         # ------------------------------------------------------------------
-        policy_name = str(train_cfg.get("policy", "CnnPolicy"))
-
         if algo_name == "DQN":
             agent_model_cfg = {
                 "policy": policy_name,
@@ -392,6 +397,7 @@ def train(
                 "exploration_final_eps": float(train_cfg.get("exploration_final_eps", 0.05)),
                 "verbose": int(train_cfg.get("verbose", 1)),
             }
+            env = raw_env
             agent = DQNAgent(env, agent_model_cfg)
 
         elif algo_name == "PPO":
@@ -404,8 +410,20 @@ def train(
                 "gamma": float(train_cfg.get("gamma", 0.99)),
                 "gae_lambda": float(train_cfg.get("gae_lambda", 0.95)),
                 "clip_range": float(train_cfg.get("clip_range", 0.2)),
+                "ent_coef": float(train_cfg.get("ent_coef", 0.0)),
                 "verbose": int(train_cfg.get("verbose", 1)),
             }
+            # Wrap in DummyVecEnv + VecNormalize for PPO so the value function
+            # sees normalised rewards (fixes explained_variance ≈ 0).
+            # norm_obs=False: observations are already clipped to [0,1].
+            # GifRecorderCallback and evaluate_agent use raw_env directly.
+            _cfg = dict(merged_env_cfg)
+            env = VecNormalize(
+                DummyVecEnv([lambda: Monitor(DataDrivenFireEnv(_cfg))]),
+                norm_obs=False,
+                norm_reward=True,
+                clip_reward=10.0,
+            )
             agent = PPOAgent(env, agent_model_cfg)
 
         else:
@@ -450,7 +468,7 @@ def train(
         )
 
         gif_cb = GifRecorderCallback(
-            train_env=env,
+            train_env=raw_env,
             wandb_logger=logger,
             gif_freq=gif_freq,
         )

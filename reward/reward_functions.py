@@ -74,11 +74,14 @@ def data_driven_reward(
     total_cells: int,
 ) -> float:
     burned_mask = (fire_map == 2) | (fire_map == 1)
-    proportion_burned = float(np.sum(burned_mask)) / total_cells
-    area_penalty = -10.0 * proportion_burned
-
     newly_burned = burned_mask & ~prev_burned_mask
-    pop_penalty = -1000.0 * float(np.sum(population_grid[newly_burned]))
+
+    # Delta-based: penalize only cells newly ignited this step, not cumulative area.
+    # Cumulative area grows regardless of agent actions and drowns out the signal.
+    area_penalty = -10.0 * float(np.sum(newly_burned)) / total_cells
+
+    total_pop = float(np.sum(population_grid)) + 1e-8
+    pop_penalty = -10.0 * float(np.sum(population_grid[newly_burned])) / total_pop
 
     return area_penalty + pop_penalty
 

@@ -63,6 +63,7 @@ class PPOAgent(BaseAgent):
             gamma=config.get("gamma", 0.99),
             gae_lambda=config.get("gae_lambda", 0.95),
             clip_range=config.get("clip_range", 0.2),
+            ent_coef=config.get("ent_coef", 0.0),
             verbose=config.get("verbose", 1),
             policy_kwargs=policy_kwargs,
         )

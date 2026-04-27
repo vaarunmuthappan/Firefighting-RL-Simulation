@@ -703,6 +703,7 @@ This version adds:
 import copy
 import json
 import math
+from collections import deque
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -851,6 +852,9 @@ class DataDrivenFireEnv(BaseFireEnv):
         self.num_agents = sum(s.get("trucks", 1) for s in self.stations)
         if self.num_agents == 0:
             self.num_agents = 1
+        max_agents = config.get("max_agents", None)
+        if max_agents is not None:
+            self.num_agents = min(self.num_agents, int(max_agents))
 
         self.actions_per_agent = len(self.movements) * len(self.interactions)
 
@@ -861,8 +865,19 @@ class DataDrivenFireEnv(BaseFireEnv):
         self.invalid_action_penalty = float(config.get("invalid_action_penalty", -20.0))
         self.useless_noop_penalty = float(config.get("useless_noop_penalty", -2.0))
         self.mitigation_reward = float(config.get("mitigation_reward", 5.0))
+        # Fallback reward for placing mitigation right at the burning edge.
+        # Kept small so the dominant signal is ahead_mitigation_reward.
         self.adjacent_mitigation_reward = float(
-            config.get("adjacent_mitigation_reward", 20.0)
+            config.get("adjacent_mitigation_reward", 10.0)
+        )
+        # Primary mitigation reward: cell is on the projected spread path
+        # (fire_arrival within +4 fire timesteps of current).
+        self.ahead_mitigation_reward = float(
+            config.get("ahead_mitigation_reward", 40.0)
+        )
+        # Extra reward per adjacent mitigation neighbor — drives line-building.
+        self.line_connectivity_reward = float(
+            config.get("line_connectivity_reward", 25.0)
         )
         self.move_toward_fire_reward = float(
             config.get("move_toward_fire_reward", 1.0)
@@ -870,6 +885,8 @@ class DataDrivenFireEnv(BaseFireEnv):
         self.move_away_fire_penalty = float(
             config.get("move_away_fire_penalty", -1.0)
         )
+        self.revisit_penalty = float(config.get("revisit_penalty", 0.0))
+        self.revisit_window = int(config.get("revisit_window", 20))
 
         # ------------------------------------------------------------------
         # Fire schedule
@@ -924,7 +941,8 @@ class DataDrivenFireEnv(BaseFireEnv):
         # 2. current agent time remaining map
         # 3. fire timestep map
         # 4. fire sub-step map
-        self.extra_state_channels = 4
+        # 5. fire arrival urgency map
+        self.extra_state_channels = 5
 
         num_attrs = len(self.attributes) + self.extra_state_channels
         self.observation_space = spaces.Box(
@@ -1087,12 +1105,17 @@ class DataDrivenFireEnv(BaseFireEnv):
         self.agents = []
         for station in self.stations:
             for truck_idx in range(station.get("trucks", 1)):
+                if len(self.agents) >= self.num_agents:
+                    break
                 self.agents.append({
                     "pos": [station["grid_row"], station["grid_col"]],
                     "station": station.get("name", "unknown"),
                     "truck_id": truck_idx,
                     "time_remaining": self.time_budget,
+                    "recent_positions": deque(maxlen=self.revisit_window),
                 })
+            if len(self.agents) >= self.num_agents:
+                break
 
         if not self.agents:
             self.agents = [{
@@ -1100,6 +1123,7 @@ class DataDrivenFireEnv(BaseFireEnv):
                 "station": "default",
                 "truck_id": 0,
                 "time_remaining": self.time_budget,
+                "recent_positions": deque(maxlen=self.revisit_window),
             }]
             self.num_agents = 1
 
@@ -1121,7 +1145,7 @@ class DataDrivenFireEnv(BaseFireEnv):
     def step(self, action: int) -> Tuple[np.ndarray, float, bool, bool, Dict[str, Any]]:
         agent = self.agents[self.current_agent_idx]
         old_pos = list(agent["pos"])
-        old_dist_to_fire = self._nearest_burning_distance(old_pos)
+        old_dist_to_fire = self._distance_to_next_front(old_pos)
 
         movement_idx = action % len(self.movements)
         interaction_idx = action // len(self.movements)
@@ -1132,6 +1156,7 @@ class DataDrivenFireEnv(BaseFireEnv):
 
         move_cost = 0.0
         new_pos = list(agent["pos"])
+        wall_hit = False
 
         if movement_str != "none":
             if movement_str == "up":
@@ -1146,6 +1171,8 @@ class DataDrivenFireEnv(BaseFireEnv):
             if new_pos != list(agent["pos"]):
                 on_road = self.roads_grid[new_pos[0], new_pos[1]] > 0
                 move_cost = MOVE_TIME_ROAD if on_road else MOVE_TIME_OFFROAD
+            else:
+                wall_hit = True
 
         build_cost = 0.0
         if interaction_str != "none":
@@ -1155,7 +1182,9 @@ class DataDrivenFireEnv(BaseFireEnv):
         action_executed = False
         placed_mitigation = False
 
-        if total_cost <= agent["time_remaining"] + 1e-6:
+        if wall_hit:
+            reward += self.invalid_action_penalty
+        elif total_cost <= agent["time_remaining"] + 1e-6:
             action_executed = True
 
             if move_cost > 0:
@@ -1164,34 +1193,63 @@ class DataDrivenFireEnv(BaseFireEnv):
             cell_value = self.fire_map[agent["pos"][0], agent["pos"][1]]
             if cell_value == UNBURNED and interaction_str != "none":
                 mitigation_type = MITIGATION_MAP.get(interaction_str, FIRELINE)
-                adjacent_to_fire = self._is_burning_adjacent(agent["pos"][0], agent["pos"][1])
-                self.fire_map[agent["pos"][0], agent["pos"][1]] = mitigation_type
+                r, c = agent["pos"][0], agent["pos"][1]
+                arrival_at_cell = int(self.fire_arrival[r, c])
+                is_ahead_of_fire = (
+                    self.fire_timestep < arrival_at_cell <= self.fire_timestep + 4
+                )
+                adjacent_to_fire = self._is_burning_adjacent(r, c)
+                self.fire_map[r, c] = mitigation_type
                 placed_mitigation = True
 
                 reward += self.mitigation_reward
-                if adjacent_to_fire:
+                if is_ahead_of_fire:
+                    reward += self.ahead_mitigation_reward
+                elif adjacent_to_fire:
+                    # Fallback: still useful, but smaller incentive than ahead placement
                     reward += self.adjacent_mitigation_reward
+
+                # Connectivity bonus: reward each adjacent cell that is already mitigation
+                for _dr, _dc in ((-1, 0), (1, 0), (0, -1), (0, 1)):
+                    nr, nc = r + _dr, c + _dc
+                    if 0 <= nr < self.grid_rows and 0 <= nc < self.grid_cols:
+                        if self.fire_map[nr, nc] in (FIRELINE, SCRATCHLINE, WETLINE):
+                            reward += self.line_connectivity_reward
 
             agent["time_remaining"] -= total_cost
         else:
-            reward += self.invalid_action_penalty
+            # Budget exhausted: silently skip the action.  The fire spreading
+            # already encodes the opportunity cost of wasted time; piling on
+            # invalid_action_penalty here floods the episode with -2 hits for
+            # every one of the ~30 budget-exhausted steps per fire window,
+            # drowning out all mitigation reward signal.
+            pass
 
-        # Movement shaping
-        new_dist_to_fire = self._nearest_burning_distance(agent["pos"])
+        # Movement shaping (distance to projected spread front, not current flames)
+        new_dist_to_fire = self._distance_to_next_front(agent["pos"])
         if move_cost > 0 and action_executed:
             if new_dist_to_fire < old_dist_to_fire:
                 reward += self.move_toward_fire_reward
             elif new_dist_to_fire > old_dist_to_fire:
                 reward += self.move_away_fire_penalty
 
-        # Penalize useless no-op
+            # Revisit penalty: discourage A→B→A oscillation loops.
+            new_pos_tuple = tuple(agent["pos"])
+            if new_pos_tuple in agent["recent_positions"]:
+                reward += self.revisit_penalty
+            agent["recent_positions"].append(new_pos_tuple)
+
+        # Penalize useless no-op only when the agent still has time to spend.
+        # When budget is already 0, no-op is the correct behavior — penalizing
+        # it forces the agent to prefer rejected move attempts (-2) over doing
+        # nothing, which is exactly the "hover/oscillate" loop we want to break.
         if movement_str == "none" and interaction_str == "none":
-            if old_dist_to_fire > 0:
+            if old_dist_to_fire > 0 and agent["time_remaining"] > 0:
                 reward += self.useless_noop_penalty
 
-        # Penalize asking to build but failing to place
+        # Penalize asking to build but failing to place (cell already burning/burned)
         if interaction_str != "none" and action_executed and not placed_mitigation:
-            reward += -5.0
+            reward += self.invalid_action_penalty
 
         # Advance to next agent
         self.current_agent_idx = (self.current_agent_idx + 1) % self.num_agents
@@ -1371,10 +1429,24 @@ class DataDrivenFireEnv(BaseFireEnv):
             dtype=np.float32,
         )
 
+        # Fire arrival urgency: 1.0 = burns next timestep, decays linearly to 0
+        # over an 8-timestep lookahead window.  Already-burned cells → 0.
+        steps_until_burn = (
+            self.fire_arrival[:self.grid_rows, :self.grid_cols].astype(np.float32)
+            - float(self.fire_timestep)
+        )
+        _lookahead = 8.0
+        arrival_channel = np.where(
+            steps_until_burn > 0,
+            np.clip(1.0 - steps_until_burn / _lookahead, 0.0, 1.0),
+            0.0,
+        ).astype(np.float32)
+
         channels.append(current_agent_pos_map)
         channels.append(time_remaining_map)
         channels.append(fire_timestep_map)
         channels.append(fire_sub_step_map)
+        channels.append(arrival_channel)
 
         full_obs = np.stack(channels, axis=-1).astype(np.float32)
 
@@ -1412,6 +1484,25 @@ class DataDrivenFireEnv(BaseFireEnv):
         if len(burning) == 0:
             return 0.0
         dists = np.abs(burning[:, 0] - pos[0]) + np.abs(burning[:, 1] - pos[1])
+        return float(np.min(dists))
+
+    def _distance_to_next_front(self, pos: list) -> float:
+        """Manhattan distance to the projected spread front.
+
+        Targets unburned cells scheduled to ignite within the next 1–3 fire
+        timesteps so movement shaping points the agent ahead of the fire, not
+        at cells already burning.  Falls back to nearest burning cell when no
+        such cells exist (end of fire or all consumed).
+        """
+        lookahead_mask = (
+            (self.fire_arrival >= self.fire_timestep + 1)
+            & (self.fire_arrival <= self.fire_timestep + 3)
+            & (self.fire_map == UNBURNED)
+        )
+        front_cells = np.argwhere(lookahead_mask)
+        if len(front_cells) == 0:
+            return self._nearest_burning_distance(pos)
+        dists = np.abs(front_cells[:, 0] - pos[0]) + np.abs(front_cells[:, 1] - pos[1])
         return float(np.min(dists))
 
     def _advance_fire_substep(self) -> None:
