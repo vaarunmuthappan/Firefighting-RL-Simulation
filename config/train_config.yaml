@@ -12,7 +12,9 @@ n_epochs: 10               # reuse each rollout 10× — key for sample efficien
 gamma: 0.99
 gae_lambda: 0.95
 clip_range: 0.2
-ent_coef: 0.01             # entropy bonus — keeps exploration alive without ε schedule
+ent_coef: 0.001            # reduced from 0.01: explained_variance=0.825 at 40k but entropy
+                           # stuck at max because entropy bonus (0.01×2.96=0.030) was 5×
+                           # larger than policy gradient (-0.006), actively blocking learning
 vf_coef: 0.5
 max_grad_norm: 0.5
 
