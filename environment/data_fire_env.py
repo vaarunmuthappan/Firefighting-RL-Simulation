@@ -28,7 +28,7 @@ from scipy.ndimage import distance_transform_edt
 from environment.base_env import BaseFireEnv
 from environment.observation_builder import ObservationBuilder
 from fire_sim.sim_interface import FireSimInterface
-from reward.reward_functions import data_driven_reward
+from reward.reward_functions import fighting_fire_round_reward, fighting_fire_step_penalty
 
 # BurnStatus values
 UNBURNED = 0
@@ -457,41 +457,37 @@ class DataDrivenFireEnv(BaseFireEnv):
         # Advance to next agent
         self.current_agent_idx = (self.current_agent_idx + 1) % self.num_agents
 
-        # When all agents have had a turn, advance fire by one sub-step
+        # When all agents have had a turn, advance fire and compute round reward
         reward = 0.0
         if self.current_agent_idx == 0:
-            # Save burned state before fire advance
+            # Snapshot burned state BEFORE fire advances (needed for delta signals)
             self.prev_burned_mask = (self.fire_map == BURNED) | (self.fire_map == BURNING)
 
             # Advance fire by one sub-step
             self._advance_fire_substep()
 
-            # Compute reward on fire advance
-            total_cells = self.grid_rows * self.grid_cols
-            reward += data_driven_reward(
-                self.fire_map, self.population_grid,
-                self.prev_burned_mask, total_cells,
+            # Round reward: mitigation-contact + growth penalty + population penalty
+            reward += fighting_fire_round_reward(
+                self.fire_map,
+                self.population_grid,
+                self.prev_burned_mask,
             )
 
-            # Check if we should advance to next fire timestep
+            # Advance fire timestep bookkeeping
             self.fire_sub_step += 1
             batches = self.fire_schedule.get(self.fire_timestep, [])
             if self.fire_sub_step >= max(len(batches), self.actions_per_fire_step):
-                # Transition BURNING -> BURNED before next timestep
                 self._transition_burning_to_burned()
                 self.fire_timestep += 1
                 self.fire_sub_step = 0
-
-                # Reset all agents' time budgets
                 for a in self.agents:
                     a["time_remaining"] = self.time_budget
-
-                # Check termination
                 if self.fire_timestep > self.max_fire_timestep:
                     self._is_active = False
 
-        # Timestep penalty every step
-        reward += -1000.0
+        # Conditional timestep penalty: -1 if near fire, -5 if far away
+        agent_positions = [a["pos"] for a in self.agents]
+        reward += fighting_fire_step_penalty(agent_positions, self.fire_map)
 
         # Update agent_pos for compatibility
         self.agent_pos = self.agents[0]["pos"]

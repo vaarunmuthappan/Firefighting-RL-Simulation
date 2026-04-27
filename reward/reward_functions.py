@@ -1,10 +1,20 @@
 """Reward functions for the firefighting RL environment.
 
 Two reward systems:
-  A. Data-driven env (DataDrivenFireEnv):
-     1. Area penalty: -proportion of total cells that are burned/burning
-     2. Population penalty: -1,000,000 × population of newly burned pixels
-     3. Timestep penalty: -1000 per step (applied in env.step())
+
+  A. Data-driven env (DataDrivenFireEnv) — fighting_fire_reward():
+     Applied per ROUND (once all agents complete their turn):
+       1. Mitigation-contact reward: +300/+150/+75 per fireline/scratchline/wetline
+          cell edge-adjacent to a burning cell  →  dense causal signal for fire-fighting
+       2. Fire-front growth penalty: -50 × new cells ignited this round
+          →  immediate signal tied to fire spreading, not lagged cumulative area
+       3. Population penalty: -100 × population of newly burned cells
+          →  scaled down from -1,000,000 so it doesn't drown the dense signals above
+     Applied per AGENT STEP:
+       4. Conditional timestep penalty:
+            -1   if any agent is within PROXIMITY_RADIUS cells of a burning cell
+            -5   otherwise
+          →  removes the -10M/episode baseline; being near fire is no longer penalised
 
   B. SimFire env (FireEnv) — kept for backwards compatibility:
      1. Burning RoS penalty
@@ -39,33 +49,110 @@ _CROSS_KERNEL = np.array([[0, 1, 0],
 # Data-driven reward (DataDrivenFireEnv)
 # ---------------------------------------------------------------------------
 
+# Radius (cells) within which an agent is considered "near fire"
+PROXIMITY_RADIUS: int = 5
+
+# Mitigation-contact bonuses (per edge-adjacent contact with burning cell)
+_MIT_CONTACT_BONUS = {
+    _FIRELINE:    300.0,
+    _SCRATCHLINE: 150.0,
+    _WETLINE:      75.0,
+}
+
+# Fire-front growth penalty per newly ignited cell
+_GROWTH_PENALTY_PER_CELL: float = 50.0
+
+# Population penalty per person in a newly burned cell
+_POP_PENALTY_PER_PERSON: float = 100.0
+
+# Timestep penalty: small if near fire, larger if idling far away
+_STEP_PENALTY_NEAR:  float = -1.0
+_STEP_PENALTY_FAR:   float = -5.0
+
+
+def fighting_fire_step_penalty(agent_positions: list, fire_map: np.ndarray) -> float:
+    """Conditional timestep penalty applied every agent step.
+
+    Returns -1 if any agent is within PROXIMITY_RADIUS cells of a burning
+    cell, otherwise -5.  This replaces the flat -1000/step that dominated
+    previous training and made fire-fighting indistinguishable from idling.
+
+    Args:
+        agent_positions: List of [row, col] positions for all agents.
+        fire_map: 2D int array of BurnStatus values.
+
+    Returns:
+        -1.0 or -5.0.
+    """
+    rows, cols = fire_map.shape
+    for pos in agent_positions:
+        r, c = int(pos[0]), int(pos[1])
+        r0 = max(0, r - PROXIMITY_RADIUS)
+        r1 = min(rows, r + PROXIMITY_RADIUS + 1)
+        c0 = max(0, c - PROXIMITY_RADIUS)
+        c1 = min(cols, c + PROXIMITY_RADIUS + 1)
+        if np.any(fire_map[r0:r1, c0:c1] == _BURNING):
+            return _STEP_PENALTY_NEAR
+    return _STEP_PENALTY_FAR
+
+
+def fighting_fire_round_reward(
+    fire_map: np.ndarray,
+    population_grid: np.ndarray,
+    prev_burned_mask: np.ndarray,
+) -> float:
+    """Round reward applied once per full agent round (after fire advances).
+
+    Combines three components:
+      1. Mitigation-contact reward  — dense positive signal for fire-fighting
+      2. Fire-front growth penalty  — immediate signal for fire spreading
+      3. Population penalty         — scaled to -100×people (not -1M×people)
+
+    Args:
+        fire_map:          2D int array of BurnStatus values (post-fire-advance).
+        population_grid:   2D float array of population per cell.
+        prev_burned_mask:  Boolean mask of cells that were burned/burning
+                           BEFORE this fire advance.
+
+    Returns:
+        Scalar reward (positive for good fire-fighting, negative for spread).
+    """
+    # 1. Mitigation-contact reward
+    burning_mask = fire_map == _BURNING
+    fire_adjacent = binary_dilation(burning_mask, structure=_CROSS_KERNEL)
+    contact_reward = 0.0
+    for mit_status, bonus in _MIT_CONTACT_BONUS.items():
+        contacts = (fire_map == mit_status) & fire_adjacent
+        contact_reward += float(np.count_nonzero(contacts)) * bonus
+
+    # 2. Fire-front growth penalty
+    burned_now = (fire_map == _BURNED) | (fire_map == _BURNING)
+    new_cells = float(np.count_nonzero(burned_now & ~prev_burned_mask))
+    growth_penalty = -_GROWTH_PENALTY_PER_CELL * new_cells
+
+    # 3. Population penalty (scaled down)
+    newly_burned = burned_now & ~prev_burned_mask
+    pop_penalty = -_POP_PENALTY_PER_PERSON * float(np.sum(population_grid[newly_burned]))
+
+    return contact_reward + growth_penalty + pop_penalty
+
+
+# ---------------------------------------------------------------------------
+# Legacy data_driven_reward — kept for reference, no longer used in training
+# ---------------------------------------------------------------------------
+
 def data_driven_reward(
     fire_map: np.ndarray,
     population_grid: np.ndarray,
     prev_burned_mask: np.ndarray,
     total_cells: int,
 ) -> float:
-    """Reward for the data-driven fire environment.
-
-    Args:
-        fire_map: 2D array with BurnStatus values.
-        population_grid: 2D float array of population per cell.
-        prev_burned_mask: Boolean 2D array — True for cells that were already
-            burned/burning BEFORE this fire advance.
-        total_cells: Total number of cells in the grid (rows × cols).
-
-    Returns:
-        Scalar reward (area penalty + population penalty).
-        Timestep penalty is applied separately in env.step().
-    """
+    """Original reward (area proportion + 1M×population). No longer used."""
     burned_mask = (fire_map == _BURNED) | (fire_map == _BURNING)
     proportion_burned = float(np.sum(burned_mask)) / total_cells
-    area_penalty = -proportion_burned
-
     newly_burned = burned_mask & ~prev_burned_mask
     pop_penalty = -1_000_000.0 * float(np.sum(population_grid[newly_burned]))
-
-    return area_penalty + pop_penalty
+    return -proportion_burned + pop_penalty
 
 
 # ---------------------------------------------------------------------------
