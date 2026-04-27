@@ -17,6 +17,11 @@ wind_direction: 135.0
 moisture: 0.03
 
 # Observation channels
+# self_pos:     binary — 1.0 at THIS agent's cell only.
+#               Each agent now sees a UNIQUE observation so the shared policy
+#               learns position-dependent actions (independent behaviour).
+# other_agents: binary — 1.0 at every OTHER agent's cell.
+#               Lets agents learn to spread out instead of crowding one spot.
 attributes:
   - fire_map
   - elevation
@@ -24,15 +29,19 @@ attributes:
   - sigma
   - delta
   - M_x
+  - self_pos
+  - other_agents
 normalized_attributes:
   - elevation
   - w_0
   - sigma
   - delta
   - M_x
+  - self_pos
+  - other_agents
 
-# Episode settings
-max_episode_steps: 10000
+# Episode settings — shorter episodes = more training signal per hour
+max_episode_steps: 5000
 
 # Fire timing: 36 agent sub-steps per 3-hour fire timestep (for proportional spread)
 actions_per_fire_step: 36

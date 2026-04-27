@@ -11,6 +11,7 @@ import numpy as np
 import yaml
 
 from agents.dqn_agent import DQNAgent
+from agents.ppo_agent import PPOAgent
 from environment.data_fire_env import DataDrivenFireEnv
 from training.callbacks import CheckpointCallback, EvalCallback
 from training.evaluate import evaluate_agent
@@ -94,22 +95,38 @@ def train(
         # ------------------------------------------------------------------
         # 4. Build agent
         # ------------------------------------------------------------------
-        agent_model_cfg = {
-            "policy": train_cfg.get("policy", "CnnPolicy"),
-            "learning_rate": float(train_cfg.get("learning_rate", 1e-4)),
-            "buffer_size": int(train_cfg.get("buffer_size", 50000)),
-            "batch_size": int(train_cfg.get("batch_size", 32)),
-            "gamma": float(train_cfg.get("gamma", 0.99)),
-            "train_freq": int(train_cfg.get("train_freq", 4)),
-            "target_update_interval": int(train_cfg.get("target_update_interval", 1000)),
-            "exploration_fraction": float(train_cfg.get("exploration_fraction", 0.3)),
-            "exploration_final_eps": float(train_cfg.get("exploration_final_eps", 0.05)),
-            "verbose": int(train_cfg.get("verbose", 1)),
-        }
-
-        if algo_name != "DQN":
-            raise ValueError(f"Unknown algorithm '{algo_name}'. Only 'DQN' is supported.")
-        agent = DQNAgent(env, agent_model_cfg)
+        if algo_name == "PPO":
+            agent_model_cfg = {
+                "policy": train_cfg.get("policy", "CnnPolicy"),
+                "learning_rate": float(train_cfg.get("learning_rate", 3e-4)),
+                "n_steps": int(train_cfg.get("n_steps", 512)),
+                "batch_size": int(train_cfg.get("batch_size", 64)),
+                "n_epochs": int(train_cfg.get("n_epochs", 10)),
+                "gamma": float(train_cfg.get("gamma", 0.99)),
+                "gae_lambda": float(train_cfg.get("gae_lambda", 0.95)),
+                "clip_range": float(train_cfg.get("clip_range", 0.2)),
+                "ent_coef": float(train_cfg.get("ent_coef", 0.01)),
+                "vf_coef": float(train_cfg.get("vf_coef", 0.5)),
+                "max_grad_norm": float(train_cfg.get("max_grad_norm", 0.5)),
+                "verbose": int(train_cfg.get("verbose", 1)),
+            }
+            agent = PPOAgent(env, agent_model_cfg)
+        elif algo_name == "DQN":
+            agent_model_cfg = {
+                "policy": train_cfg.get("policy", "CnnPolicy"),
+                "learning_rate": float(train_cfg.get("learning_rate", 1e-4)),
+                "buffer_size": int(train_cfg.get("buffer_size", 10000)),
+                "batch_size": int(train_cfg.get("batch_size", 32)),
+                "gamma": float(train_cfg.get("gamma", 0.99)),
+                "train_freq": int(train_cfg.get("train_freq", 4)),
+                "target_update_interval": int(train_cfg.get("target_update_interval", 1000)),
+                "exploration_fraction": float(train_cfg.get("exploration_fraction", 0.3)),
+                "exploration_final_eps": float(train_cfg.get("exploration_final_eps", 0.05)),
+                "verbose": int(train_cfg.get("verbose", 1)),
+            }
+            agent = DQNAgent(env, agent_model_cfg)
+        else:
+            raise ValueError(f"Unknown algorithm '{algo_name}'. Supported: 'DQN', 'PPO'.")
 
         # Resume from checkpoint if specified
         resume_step = 0

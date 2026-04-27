@@ -195,17 +195,21 @@ class DataDrivenFireEnv(BaseFireEnv):
         self.sim = FireSimInterface(sim_config)
 
         # Normalisation bounds
+        # self_pos / other_agents are binary [0,1] — handled by the else branch.
+        # fire_map uses max=WETLINE=5 (agents are no longer stamped onto fire_map;
+        # they get their own dedicated channels instead).
         raw_bounds = dict(self.sim.get_attribute_bounds())
         self.min_maxes: Dict[str, Dict[str, float]] = {}
         for attr in self.attributes:
             if attr == "fire_map":
-                self.min_maxes[attr] = {"min": 0, "max": float(self.sim_agent_id)}
+                self.min_maxes[attr] = {"min": 0, "max": float(WETLINE)}
             elif attr in raw_bounds:
                 self.min_maxes[attr] = {
                     "min": float(raw_bounds[attr]["min"]),
                     "max": float(raw_bounds[attr]["max"]),
                 }
             else:
+                # self_pos, other_agents, and any future binary channels
                 self.min_maxes[attr] = {"min": 0.0, "max": 1.0}
 
         # Observation downsampling for memory efficiency
@@ -582,16 +586,19 @@ class DataDrivenFireEnv(BaseFireEnv):
         frame[:, :, 1] = (0.55 - 0.25 * elev_norm) * shade
         frame[:, :, 2] = (0.25 + 0.20 * elev_norm) * shade
 
-        # Population overlay: yellow (low) → orange → red (high) — vectorised
+        # Population overlay: yellow (low density) → deep red (high density).
+        # Alpha is boosted so even small populations are clearly visible.
+        # Paradise, CA had ~26k residents; our estimate is ~15k across 673 cells.
         pop = self.population_grid[:self.grid_rows, :self.grid_cols]
         pop_max = float(pop.max()) if pop.max() > 0 else 1.0
         pop_mask = pop > 0
         if np.any(pop_mask):
             p = np.where(pop_mask, pop / pop_max, 0.0)
-            alpha_p = np.where(pop_mask, np.minimum(0.65, 0.25 + 0.40 * p), 0.0)
-            pr = np.minimum(1.0, 0.95 + 0.05 * p)
-            pg = np.maximum(0.0, 0.85 - 0.65 * p)
-            pb = np.full_like(p, 0.10)
+            # Stronger alpha: base 0.55, max 0.85 — population always visible
+            alpha_p = np.where(pop_mask, np.minimum(0.85, 0.55 + 0.30 * p), 0.0)
+            pr = np.minimum(1.0, 1.00)          # full red channel always on
+            pg = np.maximum(0.0, 0.80 - 0.80 * p)  # yellow → red as density ↑
+            pb = np.where(pop_mask, 0.05, 0.0)
             for ch, layer in enumerate([pr, pg, pb]):
                 frame[:, :, ch] = np.where(
                     pop_mask,
@@ -621,10 +628,9 @@ class DataDrivenFireEnv(BaseFireEnv):
         return (np.clip(frame, 0, 1) * 255).astype(np.uint8)
 
     def _build_observation(self, fire_map_override=None) -> np.ndarray:
+        # Fire map — pure burn-status only (agents NOT stamped here so the
+        # channel is consistent regardless of which agent is acting).
         obs_fire_map = np.copy(self.fire_map)
-        # Stamp all agent positions
-        for i, agent in enumerate(self.agents):
-            obs_fire_map[agent["pos"][0], agent["pos"][1]] = self.sim_agent_id
 
         # Get terrain data from sim and crop to grid size
         attr_data = dict(self.sim.get_attribute_data())
@@ -633,8 +639,24 @@ class DataDrivenFireEnv(BaseFireEnv):
             if arr.shape != (self.grid_rows, self.grid_cols):
                 attr_data[key] = arr[:self.grid_rows, :self.grid_cols]
 
-        # Override fire_map
         attr_data["fire_map"] = obs_fire_map
+
+        # self_pos: binary channel — 1.0 only at the CURRENT agent's cell.
+        # This is the key fix for independent multi-agent behaviour: each agent
+        # now sees a unique observation so the shared policy can condition on
+        # position and learn different actions for different locations.
+        self_pos = np.zeros((self.grid_rows, self.grid_cols), dtype=np.float32)
+        cur = self.agents[self.current_agent_idx]
+        self_pos[cur["pos"][0], cur["pos"][1]] = 1.0
+        attr_data["self_pos"] = self_pos
+
+        # other_agents: binary channel — 1.0 at every OTHER agent's cell.
+        # Lets agents learn to spread out and cover different fire sectors.
+        other_agents = np.zeros((self.grid_rows, self.grid_cols), dtype=np.float32)
+        for i, agent in enumerate(self.agents):
+            if i != self.current_agent_idx:
+                other_agents[agent["pos"][0], agent["pos"][1]] = 1.0
+        attr_data["other_agents"] = other_agents
 
         # Normalise
         for attr in self.normalized_attributes:

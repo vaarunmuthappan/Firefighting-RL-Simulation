@@ -1,25 +1,30 @@
-# Training configuration — Camp Fire data-driven multi-agent
-algorithm: DQN
-policy: CnnPolicy          # CnnPolicy for spatial obs (26x27x6 after 4x downsample)
-total_timesteps: 200000
-learning_rate: 0.0001
-batch_size: 32
+# Training configuration — Camp Fire multi-agent, PPO for fast learning
+algorithm: PPO
+policy: CnnPolicy          # CnnPolicy for spatial obs (26x27x8 after 4x downsample)
+total_timesteps: 100000    # PPO learns faster; 100k is enough for initial behaviour
+
+# PPO hyperparameters (tuned for fewest episodes to learn)
+learning_rate: 0.0003      # 3e-4 — PPO standard, safe with clipped objective
+n_steps: 512               # collect 512 steps per rollout before updating
+batch_size: 64             # mini-batch size for gradient updates
+n_epochs: 10               # reuse each rollout 10× — key for sample efficiency
 gamma: 0.99
-buffer_size: 10000         # 10k * 26*27*6*4bytes*2 = ~337MB (manageable)
-train_freq: 4
-target_update_interval: 1000
-exploration_fraction: 0.3
-exploration_final_eps: 0.05
+gae_lambda: 0.95
+clip_range: 0.2
+ent_coef: 0.01             # entropy bonus — keeps exploration alive without ε schedule
+vf_coef: 0.5
+max_grad_norm: 0.5
+
 checkpoint_dir: checkpoints/
-checkpoint_freq: 20000
-eval_freq: 20000
+checkpoint_freq: 10000
+eval_freq: 10000
 eval_episodes: 3
 experiment_name: Firefighting-RL-DataDriven
-run_name: camp_fire_multiagent
+run_name: camp_fire_ppo_selfpos
 verbose: 1
 
 # W&B settings
 wandb_project: "Firefighting RL"
 
 # GIF recording every gif_freq steps
-gif_freq: 20000
+gif_freq: 10000
