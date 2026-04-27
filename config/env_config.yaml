@@ -43,5 +43,9 @@ normalized_attributes:
 # Episode settings — shorter episodes = more training signal per hour
 max_episode_steps: 5000
 
+# Reward scale: keeps per-step rewards in ±1 range so PPO's value function
+# can converge (raw rewards are ±300k; ×0.001 → ±300 per episode).
+reward_scale: 0.001
+
 # Fire timing: 36 agent sub-steps per 3-hour fire timestep (for proportional spread)
 actions_per_fire_step: 36

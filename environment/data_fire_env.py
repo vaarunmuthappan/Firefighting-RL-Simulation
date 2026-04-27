@@ -154,6 +154,13 @@ class DataDrivenFireEnv(BaseFireEnv):
         self.initial_pos: List[int] = list(config.get("initial_pos", [15, 15]))
         self.max_episode_steps: int = config.get("max_episode_steps", 5000)
 
+        # Reward scale: multiply ALL reward components by this factor.
+        # PPO requires rewards in roughly [-1, +1] per step to keep the value
+        # function stable. Our raw rewards are in the ±300k range, which causes
+        # the value loss to diverge and the policy gradient to become noise.
+        # Setting reward_scale=0.001 brings per-episode rewards to ±300.
+        self.reward_scale: float = float(config.get("reward_scale", 1.0))
+
         movements: List[str] = list(config.get("movements", ["up", "down", "left", "right"]))
         interactions: List[str] = list(config.get("interactions", ["fireline"]))
         self.movements: List[str] = ["none"] + movements
@@ -528,6 +535,9 @@ class DataDrivenFireEnv(BaseFireEnv):
         # Conditional timestep penalty: -1 if near fire, -5 if far away
         agent_positions = [a["pos"] for a in self.agents]
         reward += fighting_fire_step_penalty(agent_positions, self.fire_map)
+
+        # Apply reward scale (critical for PPO stability — keeps values in ±1 range)
+        reward *= self.reward_scale
 
         # Update agent_pos for compatibility
         self.agent_pos = self.agents[0]["pos"]

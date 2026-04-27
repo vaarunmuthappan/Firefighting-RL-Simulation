@@ -1,12 +1,13 @@
 # Training configuration — Camp Fire multi-agent, PPO for fast learning
 algorithm: PPO
 policy: CnnPolicy          # CnnPolicy for spatial obs (26x27x8 after 4x downsample)
-total_timesteps: 100000    # PPO learns faster; 100k is enough for initial behaviour
+total_timesteps: 200000
 
 # PPO hyperparameters (tuned for fewest episodes to learn)
 learning_rate: 0.0003      # 3e-4 — PPO standard, safe with clipped objective
-n_steps: 512               # collect 512 steps per rollout before updating
-batch_size: 64             # mini-batch size for gradient updates
+n_steps: 5000              # ~22 fire sub-steps per rollout (15 agents × 5000 / 15 / 36)
+                           # long enough to see mitigation contact reward and growth penalty
+batch_size: 256            # larger mini-batch to match longer rollout
 n_epochs: 10               # reuse each rollout 10× — key for sample efficiency
 gamma: 0.99
 gae_lambda: 0.95
