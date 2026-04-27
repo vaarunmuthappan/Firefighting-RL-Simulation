@@ -53,6 +53,23 @@ BUILD_TIME: Dict[str, float] = {
     "wetline": 20.0,       # spray-based, fastest
 }
 
+# Mitigation resistance: number of fire-adjacent sub-steps before degrading.
+# Each sub-step ≈ 5 minutes (180 min / 36 sub-steps per fire timestep).
+# FIRELINE is permanent (not listed here = no degradation).
+_MITIGATION_RESISTANCE: Dict[int, int] = {
+    SCRATCHLINE: 108,  # ~9 h of adjacency (3 full fire timesteps)
+    WETLINE: 36,       # ~3 h of adjacency (1 full fire timestep)
+}
+
+# Spiral offsets used to spread trucks from the same station to unique cells.
+_SPREAD_OFFSETS: List[Tuple[int, int]] = [
+    (0, 0), (0, 1), (1, 0), (0, -1), (-1, 0),
+    (1, 1), (-1, 1), (1, -1), (-1, -1),
+    (0, 2), (2, 0), (0, -2), (-2, 0),
+    (1, 2), (2, 1), (-1, 2), (2, -1),
+    (-2, 1), (-1, -2), (2, 2), (-2, 2), (-2, -2), (2, -2),
+]
+
 
 class DataDrivenFireEnv(BaseFireEnv):
     """Gymnasium environment using real fire spread data from VIIRS observations.
@@ -232,6 +249,8 @@ class DataDrivenFireEnv(BaseFireEnv):
         self.fire_map: np.ndarray = np.zeros((grid_rows, grid_cols), dtype=int)
         self.prev_burned_mask: np.ndarray = np.zeros((grid_rows, grid_cols), dtype=bool)
         self._is_active: bool = True
+        # Tracks how many fire-adjacent sub-steps each degradable mitigation cell has endured
+        self.mitigation_exposure: Dict[Tuple[int, int], int] = {}
 
     # ------------------------------------------------------------------
     # Pre-computation
@@ -365,12 +384,29 @@ class DataDrivenFireEnv(BaseFireEnv):
         # Reset SimFire (for terrain data)
         self.sim.reset()
 
-        # Initialize agents at fire station positions
+        # Reset mitigation degradation tracking
+        self.mitigation_exposure = {}
+
+        # Initialize agents at fire station positions.
+        # Trucks from the same station are spread to adjacent unique cells using
+        # spiral offsets so they don't all stack on the same pixel.
         self.agents = []
+        occupied: set = set()
         for station in self.stations:
+            base_r, base_c = station["grid_row"], station["grid_col"]
             for truck_idx in range(station.get("trucks", 1)):
+                pos = None
+                for dr, dc in _SPREAD_OFFSETS:
+                    r = max(0, min(self.grid_rows - 1, base_r + dr))
+                    c = max(0, min(self.grid_cols - 1, base_c + dc))
+                    if (r, c) not in occupied:
+                        pos = [r, c]
+                        occupied.add((r, c))
+                        break
+                if pos is None:
+                    pos = [base_r, base_c]  # fallback (very unlikely)
                 self.agents.append({
-                    "pos": [station["grid_row"], station["grid_col"]],
+                    "pos": pos,
                     "station": station.get("name", "unknown"),
                     "truck_id": truck_idx,
                     "time_remaining": self.time_budget,
@@ -540,50 +576,47 @@ class DataDrivenFireEnv(BaseFireEnv):
                  * np.cos(azimuth_rad - aspect))
         shade = np.clip(shade, 0.15, 1.0)  # floor at 0.15 to avoid pitch black
 
-        # Base colour: low=green, mid=brown, high=grey (terrain-style)
+        # Base colour: low=green, mid=brown, high=grey — fully vectorised
         frame = np.zeros((self.grid_rows, self.grid_cols, 3), dtype=np.float32)
-        for i in range(self.grid_rows):
-            for j in range(self.grid_cols):
-                e = float(elev_norm[i, j])
-                s = float(shade[i, j])
-                # Green → olive → brown → grey gradient with elevation
-                r = (0.35 + 0.50 * e) * s
-                g = (0.55 - 0.25 * e) * s
-                b = (0.25 + 0.20 * e) * s
-                frame[i, j] = [r, g, b]
+        frame[:, :, 0] = (0.35 + 0.50 * elev_norm) * shade
+        frame[:, :, 1] = (0.55 - 0.25 * elev_norm) * shade
+        frame[:, :, 2] = (0.25 + 0.20 * elev_norm) * shade
 
-        # Population overlay: yellow (low) → orange → red (high)
+        # Population overlay: yellow (low) → orange → red (high) — vectorised
         pop = self.population_grid[:self.grid_rows, :self.grid_cols]
         pop_max = float(pop.max()) if pop.max() > 0 else 1.0
-        for i in range(self.grid_rows):
-            for j in range(self.grid_cols):
-                if pop[i, j] > 0:
-                    p = float(pop[i, j]) / pop_max
-                    alpha = min(0.65, 0.25 + 0.40 * p)
-                    pr = min(1.0, 0.95 + 0.05 * p)
-                    pg = max(0.0, 0.85 - 0.65 * p)
-                    pb = 0.10
-                    frame[i, j, 0] = frame[i, j, 0] * (1 - alpha) + pr * alpha
-                    frame[i, j, 1] = frame[i, j, 1] * (1 - alpha) + pg * alpha
-                    frame[i, j, 2] = frame[i, j, 2] * (1 - alpha) + pb * alpha
+        pop_mask = pop > 0
+        if np.any(pop_mask):
+            p = np.where(pop_mask, pop / pop_max, 0.0)
+            alpha_p = np.where(pop_mask, np.minimum(0.65, 0.25 + 0.40 * p), 0.0)
+            pr = np.minimum(1.0, 0.95 + 0.05 * p)
+            pg = np.maximum(0.0, 0.85 - 0.65 * p)
+            pb = np.full_like(p, 0.10)
+            for ch, layer in enumerate([pr, pg, pb]):
+                frame[:, :, ch] = np.where(
+                    pop_mask,
+                    frame[:, :, ch] * (1.0 - alpha_p) + layer * alpha_p,
+                    frame[:, :, ch],
+                )
 
-        # Roads overlay: white=primary, light-grey=secondary, grey=residential
+        # Roads overlay: white=primary, light-grey=secondary, grey=residential/track
         road_colors_f = {
-            1: (1.0, 1.0, 1.0),
+            1: (1.00, 1.00, 1.00),
             2: (0.78, 0.78, 0.78),
             3: (0.65, 0.65, 0.65),
             4: (0.55, 0.55, 0.45),
         }
         roads = self.roads_grid[:self.grid_rows, :self.grid_cols]
-        for i in range(self.grid_rows):
-            for j in range(self.grid_cols):
-                rt = int(roads[i, j])
-                if rt > 0:
-                    rc = road_colors_f.get(rt, (0.65, 0.65, 0.65))
-                    alpha = 0.70
-                    frame[i, j, 0] = frame[i, j, 0] * (1 - alpha) + rc[0] * alpha
-                    frame[i, j, 1] = frame[i, j, 1] * (1 - alpha) + rc[1] * alpha
-                    frame[i, j, 2] = frame[i, j, 2] * (1 - alpha) + rc[2] * alpha
+        road_alpha = 0.70
+        for rt, (rr, rg, rb) in road_colors_f.items():
+            mask = roads == rt
+            if np.any(mask):
+                for ch, lc in enumerate([rr, rg, rb]):
+                    frame[:, :, ch] = np.where(
+                        mask,
+                        frame[:, :, ch] * (1.0 - road_alpha) + lc * road_alpha,
+                        frame[:, :, ch],
+                    )
 
         return (np.clip(frame, 0, 1) * 255).astype(np.uint8)
 
@@ -655,15 +688,36 @@ class DataDrivenFireEnv(BaseFireEnv):
           1. It is UNBURNED (not already on fire, burned, or mitigated), AND
           2. At least one 4-connected neighbour is BURNING or BURNED.
 
-        This means mitigation cells (fireline/scratchline/wetline) act as
-        impassable fire barriers — fire cannot jump over or through them.
-        Cells that are only reachable through a mitigated path are protected.
+        Fireline is a permanent barrier.  Scratchline and wetline degrade
+        after repeated fire-adjacency sub-steps (_MITIGATION_RESISTANCE thresholds)
+        — once degraded they become UNBURNED and fire immediately ignites them.
         """
         batches = self.fire_schedule.get(self.fire_timestep, [])
         if self.fire_sub_step < len(batches):
             for r, c in batches[self.fire_sub_step]:
                 if self.fire_map[r, c] == UNBURNED and self._is_fire_adjacent(r, c):
                     self.fire_map[r, c] = BURNING
+
+        # --- Mitigation degradation (scratchline / wetline only) ---
+        # For each degradable mitigation cell adjacent to fire, increment its
+        # exposure counter.  When the threshold is reached the cell reverts to
+        # UNBURNED and is immediately ignited if fire is still adjacent.
+        newly_unburned: List[Tuple[int, int]] = []
+        for mit_type, threshold in _MITIGATION_RESISTANCE.items():
+            mit_rows, mit_cols = np.where(self.fire_map == mit_type)
+            for r, c in zip(mit_rows.tolist(), mit_cols.tolist()):
+                if self._is_fire_adjacent(r, c):
+                    key = (r, c)
+                    self.mitigation_exposure[key] = self.mitigation_exposure.get(key, 0) + 1
+                    if self.mitigation_exposure[key] >= threshold:
+                        self.fire_map[r, c] = UNBURNED
+                        del self.mitigation_exposure[key]
+                        newly_unburned.append(key)
+
+        # Immediately ignite freshly degraded cells (fire is right next door)
+        for r, c in newly_unburned:
+            if self._is_fire_adjacent(r, c):
+                self.fire_map[r, c] = BURNING
 
     def _transition_burning_to_burned(self) -> None:
         """Transition all BURNING cells to BURNED."""

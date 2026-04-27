@@ -233,16 +233,25 @@ def train(
                     rgb[fire_map == 3] = (rgb[fire_map == 3] * 0.2 + np.array([0, 100, 255]) * 0.8).astype(np.uint8)
                     rgb[fire_map == 4] = (rgb[fire_map == 4] * 0.2 + np.array([255, 140, 0]) * 0.8).astype(np.uint8)
                     rgb[fire_map == 5] = (rgb[fire_map == 5] * 0.2 + np.array([0, 210, 210]) * 0.8).astype(np.uint8)
-                    # Yellow agents
-                    for ag in gif_env.agents:
-                        ap = ag["pos"]
-                        for di in [-1, 0, 1]:
-                            for dj in [-1, 0, 1]:
-                                r, c = ap[0] + di, ap[1] + dj
-                                if 0 <= r < h and 0 <= c < w:
-                                    rgb[r, c] = [255, 220, 0]
                     img = PILImage.fromarray(rgb).resize((w * scale, h * scale), PILImage.NEAREST)
                     draw = ImageDraw.Draw(img)
+                    # Yellow agents: PIL circles drawn after upscale so they always
+                    # appear above any mitigation colour (orange scratchline trail, etc.)
+                    agent_radius = scale + 1
+                    for ag in gif_env.agents:
+                        ap = ag["pos"]
+                        cx = ap[1] * scale + scale // 2
+                        cy = ap[0] * scale + scale // 2
+                        draw.ellipse(
+                            [(cx - agent_radius - 1, cy - agent_radius - 1),
+                             (cx + agent_radius + 1, cy + agent_radius + 1)],
+                            fill=(40, 40, 40),
+                        )
+                        draw.ellipse(
+                            [(cx - agent_radius, cy - agent_radius),
+                             (cx + agent_radius, cy + agent_radius)],
+                            fill=(255, 220, 0),
+                        )
                     for s in stations:
                         cx = s.get("grid_col", 0) * scale + scale // 2
                         cy = s.get("grid_row", 0) * scale + scale // 2

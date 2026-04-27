@@ -264,18 +264,11 @@ class GifRecorderCallback(BaseCallback):
                 rgb[sl_mask] = (rgb[sl_mask] * 0.2 + np.array([255, 140, 0]) * 0.8).astype(np.uint8)
                 rgb[wl_mask] = (rgb[wl_mask] * 0.2 + np.array([0, 210, 210]) * 0.8).astype(np.uint8)
 
-                # ---- Fire truck agents: yellow 3×3 markers ------------------
+                # ---- Collect agent positions (NOT drawn on bitmap — done via PIL) ---
                 if hasattr(gif_env, "agents"):
                     agent_positions = [ag["pos"] for ag in gif_env.agents]
                 else:
                     agent_positions = [gif_env.agent_pos]
-
-                for ap in agent_positions:
-                    for di in (-1, 0, 1):
-                        for dj in (-1, 0, 1):
-                            rr, cc = ap[0] + di, ap[1] + dj
-                            if 0 <= rr < h and 0 <= cc < w:
-                                rgb[rr, cc] = [255, 220, 0]  # bright yellow
 
                 # ---- Scale up 4× (nearest-neighbour for pixel crispness) ----
                 scale = 4
@@ -283,6 +276,27 @@ class GifRecorderCallback(BaseCallback):
                     (w * scale, h * scale), PILImage.NEAREST
                 )
                 draw = ImageDraw.Draw(img)
+
+                # Fire truck agents: yellow filled circle with dark outline.
+                # Drawn AFTER upscaling so they always appear on top of any
+                # mitigation colour (scratchline trail stays orange correctly,
+                # and agents are unambiguously distinct yellow circles).
+                agent_radius = scale + 1  # ~5 px — clearly visible
+                for ap in agent_positions:
+                    cx = ap[1] * scale + scale // 2
+                    cy = ap[0] * scale + scale // 2
+                    # Dark outline for contrast against orange scratchline trail
+                    draw.ellipse(
+                        [(cx - agent_radius - 1, cy - agent_radius - 1),
+                         (cx + agent_radius + 1, cy + agent_radius + 1)],
+                        fill=(40, 40, 40),
+                    )
+                    # Bright yellow fill
+                    draw.ellipse(
+                        [(cx - agent_radius, cy - agent_radius),
+                         (cx + agent_radius, cy + agent_radius)],
+                        fill=(255, 220, 0),
+                    )
 
                 # Fire stations: cyan triangle markers
                 for s in stations:
