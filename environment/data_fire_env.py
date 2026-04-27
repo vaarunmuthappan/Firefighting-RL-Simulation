@@ -142,7 +142,8 @@ class DataDrivenFireEnv(BaseFireEnv):
 
         # Config
         self.attributes: List[str] = list(config.get("attributes", [
-            "fire_map", "elevation", "w_0", "sigma", "delta", "M_x"
+            "fire_map", "elevation", "w_0", "sigma", "delta", "M_x",
+            "agent_row_norm", "agent_col_norm", "other_agents",
         ]))
         _norm_attrs: List[str] = list(config.get("normalized_attributes", [
             "elevation", "w_0", "sigma", "delta", "M_x"
@@ -651,14 +652,26 @@ class DataDrivenFireEnv(BaseFireEnv):
 
         attr_data["fire_map"] = obs_fire_map
 
-        # self_pos: binary channel — 1.0 only at the CURRENT agent's cell.
-        # This is the key fix for independent multi-agent behaviour: each agent
-        # now sees a unique observation so the shared policy can condition on
-        # position and learn different actions for different locations.
-        self_pos = np.zeros((self.grid_rows, self.grid_cols), dtype=np.float32)
+        # agent_row_norm / agent_col_norm: constant-value channels.
+        # Every pixel in agent_row_norm is set to (cur_row / (grid_rows-1)).
+        # Every pixel in agent_col_norm is set to (cur_col / (grid_cols-1)).
+        #
+        # WHY constant instead of sparse binary?
+        # After 4× downsampling, trucks at (49,38) and (49,39) both map to
+        # downsampled pixel (12,9) — a sparse 1-hot self_pos channel becomes
+        # IDENTICAL for both and the policy can't distinguish them.
+        # A spatially uniform channel (e.g. filled with 0.487 vs 0.486) is
+        # unaffected by downsampling and always uniquely identifies the agent.
         cur = self.agents[self.current_agent_idx]
-        self_pos[cur["pos"][0], cur["pos"][1]] = 1.0
-        attr_data["self_pos"] = self_pos
+        cur_r, cur_c = cur["pos"][0], cur["pos"][1]
+        row_norm = cur_r / max(1, self.grid_rows - 1)
+        col_norm = cur_c / max(1, self.grid_cols - 1)
+        attr_data["agent_row_norm"] = np.full(
+            (self.grid_rows, self.grid_cols), row_norm, dtype=np.float32
+        )
+        attr_data["agent_col_norm"] = np.full(
+            (self.grid_rows, self.grid_cols), col_norm, dtype=np.float32
+        )
 
         # other_agents: binary channel — 1.0 at every OTHER agent's cell.
         # Lets agents learn to spread out and cover different fire sectors.

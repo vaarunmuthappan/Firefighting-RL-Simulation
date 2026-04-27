@@ -17,11 +17,15 @@ wind_direction: 135.0
 moisture: 0.03
 
 # Observation channels
-# self_pos:     binary — 1.0 at THIS agent's cell only.
-#               Each agent now sees a UNIQUE observation so the shared policy
-#               learns position-dependent actions (independent behaviour).
-# other_agents: binary — 1.0 at every OTHER agent's cell.
-#               Lets agents learn to spread out instead of crowding one spot.
+# agent_row_norm / agent_col_norm: CONSTANT-VALUE channels — every pixel in the
+#   channel is set to the agent's normalised row (or col) coordinate [0,1].
+#   Because the value is spatially uniform, 4× downsampling leaves it unchanged.
+#   This is the robust fix for independent multi-agent behaviour: trucks at
+#   (49,38) and (49,39) map to the same downsampled pixel, so a sparse binary
+#   self_pos channel would look identical after downsampling. A constant channel
+#   of 0.487 vs 0.486 is always distinguishable regardless of downsampling.
+# other_agents: binary spatial — 1.0 at every OTHER agent's cell; gives the
+#   policy awareness of teammates for spreading out.
 attributes:
   - fire_map
   - elevation
@@ -29,7 +33,8 @@ attributes:
   - sigma
   - delta
   - M_x
-  - self_pos
+  - agent_row_norm
+  - agent_col_norm
   - other_agents
 normalized_attributes:
   - elevation
@@ -37,7 +42,8 @@ normalized_attributes:
   - sigma
   - delta
   - M_x
-  - self_pos
+  - agent_row_norm
+  - agent_col_norm
   - other_agents
 
 # Episode settings — shorter episodes = more training signal per hour
