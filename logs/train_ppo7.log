@@ -1,0 +1,183 @@
+2026-04-27 18:51:22.519553: I tensorflow/core/platform/cpu_feature_guard.cc:182] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: AVX2 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+Traceback (most recent call last):
+  File "/Library/Frameworks/Python.framework/Versions/3.9/lib/python3.9/site-packages/tensorboard/compat/__init__.py", line 42, in tf
+    from tensorboard.compat import notf  # noqa: F401
+ImportError: cannot import name 'notf' from 'tensorboard.compat' (/Library/Frameworks/Python.framework/Versions/3.9/lib/python3.9/site-packages/tensorboard/compat/__init__.py)
+
+During handling of the above exception, another exception occurred:
+
+AttributeError: 'MessageFactory' object has no attribute 'GetPrototype'
+/Users/vaarun/Library/Python/3.9/lib/python/site-packages/google/auth/__init__.py:54: FutureWarning: You are using a Python version 3.9 past its end of life. Google will update google-auth with critical bug fixes on a best-effort basis, but not with any other fixes or features. Please upgrade your Python version, and then update google-auth.
+  warnings.warn(eol_message.format("3.9"), FutureWarning)
+/Users/vaarun/Library/Python/3.9/lib/python/site-packages/google/oauth2/__init__.py:40: FutureWarning: You are using a Python version 3.9 past its end of life. Google will update google-auth with critical bug fixes on a best-effort basis, but not with any other fixes or features. Please upgrade your Python version, and then update google-auth.
+  warnings.warn(eol_message.format("3.9"), FutureWarning)
+Traceback (most recent call last):
+  File "/Library/Frameworks/Python.framework/Versions/3.9/lib/python3.9/site-packages/tensorboard/compat/__init__.py", line 42, in tf
+    from tensorboard.compat import notf  # noqa: F401
+ImportError: cannot import name 'notf' from 'tensorboard.compat' (/Library/Frameworks/Python.framework/Versions/3.9/lib/python3.9/site-packages/tensorboard/compat/__init__.py)
+
+During handling of the above exception, another exception occurred:
+
+AttributeError: 'MessageFactory' object has no attribute 'GetPrototype'
+/Users/vaarun/Library/Python/3.9/lib/python/site-packages/pydantic/_internal/_config.py:383: UserWarning: Valid config keys have changed in V2:
+* 'allow_mutation' has been removed
+  warnings.warn(message, UserWarning)
+/Users/vaarun/Library/Python/3.9/lib/python/site-packages/networkx/utils/backends.py:135: RuntimeWarning: networkx backend defined more than once: nx-loopback
+  backends.update(_get_backends("networkx.backends"))
+wandb: [wandb.login()] Using explicit session credentials for https://api.wandb.ai.
+wandb: Appending key for api.wandb.ai to your netrc file: /Users/vaarun/.netrc
+wandb: Currently logged in as: vkm9614 (vkm9614-nyu) to https://api.wandb.ai. Use `wandb login --relogin` to force relogin
+wandb: WARNING Using a boolean value for 'reinit' is deprecated. Use 'return_previous' or 'finish_previous' instead.
+wandb: Tracking run with wandb version 0.25.1
+wandb: Run data is saved locally in /Users/vaarun/Desktop/NYU/Spring 2026/RL/Firefighting RL Simulation/wandb/run-20260427_185128-v56n2rkc
+wandb: Run `wandb offline` to turn off syncing.
+wandb: Syncing run camp_fire_ppo_1per_station
+wandb: ⭐️ View project at https://wandb.ai/vkm9614-nyu/Firefighting%20RL
+wandb: 🚀 View run at https://wandb.ai/vkm9614-nyu/Firefighting%20RL/runs/v56n2rkc
+wandb: Detected [agents] in use.
+wandb: Use W&B Weave for improved LLM call tracing. Install Weave with `pip install weave` then add `import weave` to the top of your script.
+wandb: For more information, check out the docs at: https://weave-docs.wandb.ai/
+/Users/vaarun/Library/Python/3.9/lib/python/site-packages/stable_baselines3/ppo/ppo.py:155: UserWarning: You have specified a mini-batch size of 256, but because the `RolloutBuffer` is of size `n_steps * n_envs = 5000`, after every 19 untruncated mini-batches, there will be a truncated mini-batch of size 136
+We recommend using a `batch_size` that is a factor of `n_steps * n_envs`.
+Info: (n_steps=5000 and n_envs=1)
+  warnings.warn(
+[main_train] AGENT_NAME = reference_agent
+[main_train] config_dir = config/
+[main_train] algorithm  = (from config)
+[main_train] timesteps  = (from config)
+Using cpu device
+Wrapping the env with a `Monitor` wrapper
+Wrapping the env in a DummyVecEnv.
+[train] Resuming from checkpoint: checkpoints/camp_fire_ppo_1per_station_60000_steps.zip
+Wrapping the env with a `Monitor` wrapper
+Wrapping the env in a DummyVecEnv.
+[train] Resuming from step 60000, 140000 steps remaining
+[train] Starting PPO training for 140000 timesteps …
+[train] GIFs will be recorded every 10000 steps
+---------------------------------
+| rollout/           |          |
+|    ep_len_mean     | 5e+03    |
+|    ep_rew_mean     | 14.2     |
+| time/              |          |
+|    fps             | 60       |
+|    iterations      | 1        |
+|    time_elapsed    | 83       |
+|    total_timesteps | 5000     |
+---------------------------------
+wandb: WARNING `fps` argument does not affect the frame rate of the video when providing a file path or raw bytes.
+[CheckpointCallback] Saved checkpoint: checkpoints/camp_fire_ppo_1per_station_10000_steps.zip
+[GifRecorderCallback] Logged GIF at step 10000 (reward=-137.8, 500 frames)
+-----------------------------------------
+| rollout/                |             |
+|    ep_len_mean          | 5e+03       |
+|    ep_rew_mean          | 39.9        |
+| time/                   |             |
+|    fps                  | 34          |
+|    iterations           | 2           |
+|    time_elapsed         | 286         |
+|    total_timesteps      | 10000       |
+| train/                  |             |
+|    approx_kl            | 0.012628461 |
+|    clip_fraction        | 0.0732      |
+|    clip_range           | 0.2         |
+|    entropy_loss         | -2.89       |
+|    explained_variance   | 0.929       |
+|    learning_rate        | 0.0003      |
+|    loss                 | 1.19        |
+|    n_updates            | 120         |
+|    policy_gradient_loss | -0.0105     |
+|    value_loss           | 3.85        |
+-----------------------------------------
+------------------------------------------
+| rollout/                |              |
+|    ep_len_mean          | 3.33e+03     |
+|    ep_rew_mean          | 26.6         |
+| time/                   |              |
+|    fps                  | 38           |
+|    iterations           | 3            |
+|    time_elapsed         | 388          |
+|    total_timesteps      | 15000        |
+| train/                  |              |
+|    approx_kl            | 0.0104688825 |
+|    clip_fraction        | 0.0587       |
+|    clip_range           | 0.2          |
+|    entropy_loss         | -2.87        |
+|    explained_variance   | 0.946        |
+|    learning_rate        | 0.0003       |
+|    loss                 | 1.08         |
+|    n_updates            | 130          |
+|    policy_gradient_loss | -0.00794     |
+|    value_loss           | 2.6          |
+------------------------------------------
+wandb: WARNING `fps` argument does not affect the frame rate of the video when providing a file path or raw bytes.
+[CheckpointCallback] Saved checkpoint: checkpoints/camp_fire_ppo_1per_station_20000_steps.zip
+[GifRecorderCallback] Logged GIF at step 20000 (reward=-120.4, 500 frames)
+-----------------------------------------
+| rollout/                |             |
+|    ep_len_mean          | 3.75e+03    |
+|    ep_rew_mean          | 21.4        |
+| time/                   |             |
+|    fps                  | 33          |
+|    iterations           | 4           |
+|    time_elapsed         | 590         |
+|    total_timesteps      | 20000       |
+| train/                  |             |
+|    approx_kl            | 0.011406564 |
+|    clip_fraction        | 0.0684      |
+|    clip_range           | 0.2         |
+|    entropy_loss         | -2.82       |
+|    explained_variance   | 0.957       |
+|    learning_rate        | 0.0003      |
+|    loss                 | 1.15        |
+|    n_updates            | 140         |
+|    policy_gradient_loss | -0.00788    |
+|    value_loss           | 2.35        |
+-----------------------------------------
+-----------------------------------------
+| rollout/                |             |
+|    ep_len_mean          | 4e+03       |
+|    ep_rew_mean          | 65.2        |
+| time/                   |             |
+|    fps                  | 36          |
+|    iterations           | 5           |
+|    time_elapsed         | 689         |
+|    total_timesteps      | 25000       |
+| train/                  |             |
+|    approx_kl            | 0.008919602 |
+|    clip_fraction        | 0.0358      |
+|    clip_range           | 0.2         |
+|    entropy_loss         | -2.82       |
+|    explained_variance   | 0.887       |
+|    learning_rate        | 0.0003      |
+|    loss                 | 1.35        |
+|    n_updates            | 150         |
+|    policy_gradient_loss | -0.00453    |
+|    value_loss           | 3.41        |
+-----------------------------------------
+wandb: WARNING `fps` argument does not affect the frame rate of the video when providing a file path or raw bytes.
+[CheckpointCallback] Saved checkpoint: checkpoints/camp_fire_ppo_1per_station_30000_steps.zip
+[GifRecorderCallback] Logged GIF at step 30000 (reward=-420.5, 500 frames)
+-----------------------------------------
+| rollout/                |             |
+|    ep_len_mean          | 4.17e+03    |
+|    ep_rew_mean          | 49.8        |
+| time/                   |             |
+|    fps                  | 33          |
+|    iterations           | 6           |
+|    time_elapsed         | 903         |
+|    total_timesteps      | 30000       |
+| train/                  |             |
+|    approx_kl            | 0.009515815 |
+|    clip_fraction        | 0.0612      |
+|    clip_range           | 0.2         |
+|    entropy_loss         | -2.81       |
+|    explained_variance   | 0.967       |
+|    learning_rate        | 0.0003      |
+|    loss                 | 0.819       |
+|    n_updates            | 160         |
+|    policy_gradient_loss | -0.00863    |
+|    value_loss           | 2.81        |
+-----------------------------------------
+/Library/Frameworks/Python.framework/Versions/3.9/lib/python3.9/multiprocessing/resource_tracker.py:216: UserWarning: resource_tracker: There appear to be 2 leaked semaphore objects to clean up at shutdown
+  warnings.warn('resource_tracker: There appear to be %d '

@@ -1,0 +1,184 @@
+2026-04-27 13:39:39.036875: I tensorflow/core/platform/cpu_feature_guard.cc:182] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: AVX2 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+Traceback (most recent call last):
+  File "/Library/Frameworks/Python.framework/Versions/3.9/lib/python3.9/site-packages/tensorboard/compat/__init__.py", line 42, in tf
+    from tensorboard.compat import notf  # noqa: F401
+ImportError: cannot import name 'notf' from 'tensorboard.compat' (/Library/Frameworks/Python.framework/Versions/3.9/lib/python3.9/site-packages/tensorboard/compat/__init__.py)
+
+During handling of the above exception, another exception occurred:
+
+AttributeError: 'MessageFactory' object has no attribute 'GetPrototype'
+/Users/vaarun/Library/Python/3.9/lib/python/site-packages/google/auth/__init__.py:54: FutureWarning: You are using a Python version 3.9 past its end of life. Google will update google-auth with critical bug fixes on a best-effort basis, but not with any other fixes or features. Please upgrade your Python version, and then update google-auth.
+  warnings.warn(eol_message.format("3.9"), FutureWarning)
+/Users/vaarun/Library/Python/3.9/lib/python/site-packages/google/oauth2/__init__.py:40: FutureWarning: You are using a Python version 3.9 past its end of life. Google will update google-auth with critical bug fixes on a best-effort basis, but not with any other fixes or features. Please upgrade your Python version, and then update google-auth.
+  warnings.warn(eol_message.format("3.9"), FutureWarning)
+Traceback (most recent call last):
+  File "/Library/Frameworks/Python.framework/Versions/3.9/lib/python3.9/site-packages/tensorboard/compat/__init__.py", line 42, in tf
+    from tensorboard.compat import notf  # noqa: F401
+ImportError: cannot import name 'notf' from 'tensorboard.compat' (/Library/Frameworks/Python.framework/Versions/3.9/lib/python3.9/site-packages/tensorboard/compat/__init__.py)
+
+During handling of the above exception, another exception occurred:
+
+AttributeError: 'MessageFactory' object has no attribute 'GetPrototype'
+/Users/vaarun/Library/Python/3.9/lib/python/site-packages/pydantic/_internal/_config.py:383: UserWarning: Valid config keys have changed in V2:
+* 'allow_mutation' has been removed
+  warnings.warn(message, UserWarning)
+/Users/vaarun/Library/Python/3.9/lib/python/site-packages/networkx/utils/backends.py:135: RuntimeWarning: networkx backend defined more than once: nx-loopback
+  backends.update(_get_backends("networkx.backends"))
+wandb: [wandb.login()] Using explicit session credentials for https://api.wandb.ai.
+wandb: Appending key for api.wandb.ai to your netrc file: /Users/vaarun/.netrc
+wandb: Currently logged in as: vkm9614 (vkm9614-nyu) to https://api.wandb.ai. Use `wandb login --relogin` to force relogin
+wandb: WARNING Using a boolean value for 'reinit' is deprecated. Use 'return_previous' or 'finish_previous' instead.
+wandb: Tracking run with wandb version 0.25.1
+wandb: Run data is saved locally in /Users/vaarun/Desktop/NYU/Spring 2026/RL/Firefighting RL Simulation/wandb/run-20260427_133947-289fb27j
+wandb: Run `wandb offline` to turn off syncing.
+wandb: Syncing run camp_fire_multiagent
+wandb: ⭐️ View project at https://wandb.ai/vkm9614-nyu/Firefighting%20RL
+wandb: 🚀 View run at https://wandb.ai/vkm9614-nyu/Firefighting%20RL/runs/289fb27j
+wandb: Detected [agents] in use.
+wandb: Use W&B Weave for improved LLM call tracing. Install Weave with `pip install weave` then add `import weave` to the top of your script.
+wandb: For more information, check out the docs at: https://weave-docs.wandb.ai/
+wandb: WARNING `fps` argument does not affect the frame rate of the video when providing a file path or raw bytes.
+[main_train] AGENT_NAME = reference_agent
+[main_train] config_dir = config/
+[main_train] algorithm  = (from config)
+[main_train] timesteps  = (from config)
+Using cpu device
+Wrapping the env with a `Monitor` wrapper
+Wrapping the env in a DummyVecEnv.
+[train] Starting DQN training for 200000 timesteps …
+[train] GIFs will be recorded every 20000 steps
+[CheckpointCallback] Saved checkpoint: checkpoints/camp_fire_multiagent_20000_steps.zip
+[GifRecorderCallback] Logged GIF at step 20000 (reward=330488.0, 667 frames)
+----------------------------------
+| rollout/            |          |
+|    ep_len_mean      | 7.5e+03  |
+|    ep_rew_mean      | 3.27e+05 |
+|    exploration_rate | 0.525    |
+| time/               |          |
+|    episodes         | 4        |
+|    fps              | 22       |
+|    time_elapsed     | 1313     |
+|    total_timesteps  | 30001    |
+| train/              |          |
+|    learning_rate    | 0.0001   |
+|    loss             | 91.1     |
+|    n_updates        | 7475     |
+----------------------------------
+wandb: WARNING `fps` argument does not affect the frame rate of the video when providing a file path or raw bytes.
+wandb: WARNING `fps` argument does not affect the frame rate of the video when providing a file path or raw bytes.
+[CheckpointCallback] Saved checkpoint: checkpoints/camp_fire_multiagent_40000_steps.zip
+[GifRecorderCallback] Logged GIF at step 40000 (reward=-497354.0, 667 frames)
+[CheckpointCallback] Saved checkpoint: checkpoints/camp_fire_multiagent_60000_steps.zip
+[GifRecorderCallback] Logged GIF at step 60000 (reward=212204.0, 667 frames)
+----------------------------------
+| rollout/            |          |
+|    ep_len_mean      | 8.75e+03 |
+|    ep_rew_mean      | 4.11e+05 |
+|    exploration_rate | 0.05     |
+| time/               |          |
+|    episodes         | 8        |
+|    fps              | 20       |
+|    time_elapsed     | 3351     |
+|    total_timesteps  | 70001    |
+| train/              |          |
+|    learning_rate    | 0.0001   |
+|    loss             | 66.4     |
+|    n_updates        | 17475    |
+----------------------------------
+wandb: WARNING `fps` argument does not affect the frame rate of the video when providing a file path or raw bytes.
+wandb: WARNING `fps` argument does not affect the frame rate of the video when providing a file path or raw bytes.
+[CheckpointCallback] Saved checkpoint: checkpoints/camp_fire_multiagent_80000_steps.zip
+[GifRecorderCallback] Logged GIF at step 80000 (reward=198074.0, 667 frames)
+[CheckpointCallback] Saved checkpoint: checkpoints/camp_fire_multiagent_100000_steps.zip
+[GifRecorderCallback] Logged GIF at step 100000 (reward=430418.0, 667 frames)
+----------------------------------
+| rollout/            |          |
+|    ep_len_mean      | 9.17e+03 |
+|    ep_rew_mean      | 3.81e+05 |
+|    exploration_rate | 0.05     |
+| time/               |          |
+|    episodes         | 12       |
+|    fps              | 22       |
+|    time_elapsed     | 4840     |
+|    total_timesteps  | 110001   |
+| train/              |          |
+|    learning_rate    | 0.0001   |
+|    loss             | 86.7     |
+|    n_updates        | 27475    |
+----------------------------------
+wandb: WARNING `fps` argument does not affect the frame rate of the video when providing a file path or raw bytes.
+wandb: WARNING `fps` argument does not affect the frame rate of the video when providing a file path or raw bytes.
+[CheckpointCallback] Saved checkpoint: checkpoints/camp_fire_multiagent_120000_steps.zip
+[GifRecorderCallback] Logged GIF at step 120000 (reward=281976.0, 667 frames)
+[CheckpointCallback] Saved checkpoint: checkpoints/camp_fire_multiagent_140000_steps.zip
+[GifRecorderCallback] Logged GIF at step 140000 (reward=-539414.0, 667 frames)
+----------------------------------
+| rollout/            |          |
+|    ep_len_mean      | 9.38e+03 |
+|    ep_rew_mean      | 3.4e+05  |
+|    exploration_rate | 0.05     |
+| time/               |          |
+|    episodes         | 16       |
+|    fps              | 15       |
+|    time_elapsed     | 9489     |
+|    total_timesteps  | 150001   |
+| train/              |          |
+|    learning_rate    | 0.0001   |
+|    loss             | 78       |
+|    n_updates        | 37475    |
+----------------------------------
+wandb: WARNING `fps` argument does not affect the frame rate of the video when providing a file path or raw bytes.
+wandb: WARNING `fps` argument does not affect the frame rate of the video when providing a file path or raw bytes.
+[CheckpointCallback] Saved checkpoint: checkpoints/camp_fire_multiagent_160000_steps.zip
+[GifRecorderCallback] Logged GIF at step 160000 (reward=-147753.0, 667 frames)
+[CheckpointCallback] Saved checkpoint: checkpoints/camp_fire_multiagent_180000_steps.zip
+[GifRecorderCallback] Logged GIF at step 180000 (reward=108900.0, 667 frames)
+----------------------------------
+| rollout/            |          |
+|    ep_len_mean      | 9.5e+03  |
+|    ep_rew_mean      | 3.5e+05  |
+|    exploration_rate | 0.05     |
+| time/               |          |
+|    episodes         | 20       |
+|    fps              | 17       |
+|    time_elapsed     | 10871    |
+|    total_timesteps  | 190001   |
+| train/              |          |
+|    learning_rate    | 0.0001   |
+|    loss             | 35.8     |
+|    n_updates        | 47475    |
+----------------------------------
+wandb: WARNING `fps` argument does not affect the frame rate of the video when providing a file path or raw bytes.
+wandb: WARNING `fps` argument does not affect the frame rate of the video when providing a file path or raw bytes.
+wandb: updating run metadata
+wandb: uploading history steps 28-28, summary, console lines 117-118
+wandb: 
+wandb: Run history:
+wandb:           episode ▁▁▂▂▂▃▃▄▄▄▅▅▅▆▆▇▇▇██
+wandb:    episode_length ██▁█████████████████
+wandb:    episode_reward ▇▇▃▆▆▇█▇▅▅▄█▅▆▇▁▆█▄▆
+wandb: final_mean_length ▁
+wandb: final_mean_reward ▁
+wandb:  final_std_reward ▁
+wandb: 
+wandb: Run summary:
+wandb:           episode 20
+wandb:    episode_length 10000
+wandb:    episode_reward 347174
+wandb: final_mean_length 10000
+wandb: final_mean_reward -147753
+wandb:  final_std_reward 0
+wandb: 
+wandb: 🚀 View run camp_fire_multiagent at: https://wandb.ai/vkm9614-nyu/Firefighting%20RL/runs/289fb27j
+wandb: ⭐️ View project at: https://wandb.ai/vkm9614-nyu/Firefighting%20RL
+wandb: Synced 5 W&B file(s), 11 media file(s), 22 artifact file(s) and 0 other file(s)
+wandb: Find logs at: ./wandb/run-20260427_133947-289fb27j/logs
+[CheckpointCallback] Saved checkpoint: checkpoints/camp_fire_multiagent_200000_steps.zip
+[GifRecorderCallback] Logged GIF at step 200000 (reward=-147753.0, 667 frames)
+[train] Final model saved to checkpoints/camp_fire_multiagent_dqn.zip
+[train] Running evaluation over 3 episodes …
+[train] Eval results: mean_reward=-147753.000 std=0.000 mean_length=10000.0
+[train] Recording final evaluation GIF …
+[train] Final GIF logged (667 frames, reward=-147753.0)
+[train] W&B run closed.

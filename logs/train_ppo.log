@@ -1,0 +1,130 @@
+2026-04-27 17:12:08.488240: I tensorflow/core/platform/cpu_feature_guard.cc:182] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: AVX2 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+Traceback (most recent call last):
+  File "/Library/Frameworks/Python.framework/Versions/3.9/lib/python3.9/site-packages/tensorboard/compat/__init__.py", line 42, in tf
+    from tensorboard.compat import notf  # noqa: F401
+ImportError: cannot import name 'notf' from 'tensorboard.compat' (/Library/Frameworks/Python.framework/Versions/3.9/lib/python3.9/site-packages/tensorboard/compat/__init__.py)
+
+During handling of the above exception, another exception occurred:
+
+AttributeError: 'MessageFactory' object has no attribute 'GetPrototype'
+/Users/vaarun/Library/Python/3.9/lib/python/site-packages/google/auth/__init__.py:54: FutureWarning: You are using a Python version 3.9 past its end of life. Google will update google-auth with critical bug fixes on a best-effort basis, but not with any other fixes or features. Please upgrade your Python version, and then update google-auth.
+  warnings.warn(eol_message.format("3.9"), FutureWarning)
+/Users/vaarun/Library/Python/3.9/lib/python/site-packages/google/oauth2/__init__.py:40: FutureWarning: You are using a Python version 3.9 past its end of life. Google will update google-auth with critical bug fixes on a best-effort basis, but not with any other fixes or features. Please upgrade your Python version, and then update google-auth.
+  warnings.warn(eol_message.format("3.9"), FutureWarning)
+Traceback (most recent call last):
+  File "/Library/Frameworks/Python.framework/Versions/3.9/lib/python3.9/site-packages/tensorboard/compat/__init__.py", line 42, in tf
+    from tensorboard.compat import notf  # noqa: F401
+ImportError: cannot import name 'notf' from 'tensorboard.compat' (/Library/Frameworks/Python.framework/Versions/3.9/lib/python3.9/site-packages/tensorboard/compat/__init__.py)
+
+During handling of the above exception, another exception occurred:
+
+AttributeError: 'MessageFactory' object has no attribute 'GetPrototype'
+/Users/vaarun/Library/Python/3.9/lib/python/site-packages/pydantic/_internal/_config.py:383: UserWarning: Valid config keys have changed in V2:
+* 'allow_mutation' has been removed
+  warnings.warn(message, UserWarning)
+/Users/vaarun/Library/Python/3.9/lib/python/site-packages/networkx/utils/backends.py:135: RuntimeWarning: networkx backend defined more than once: nx-loopback
+  backends.update(_get_backends("networkx.backends"))
+wandb: [wandb.login()] Using explicit session credentials for https://api.wandb.ai.
+wandb: Appending key for api.wandb.ai to your netrc file: /Users/vaarun/.netrc
+wandb: Currently logged in as: vkm9614 (vkm9614-nyu) to https://api.wandb.ai. Use `wandb login --relogin` to force relogin
+wandb: WARNING Using a boolean value for 'reinit' is deprecated. Use 'return_previous' or 'finish_previous' instead.
+wandb: Tracking run with wandb version 0.25.1
+wandb: Run data is saved locally in /Users/vaarun/Desktop/NYU/Spring 2026/RL/Firefighting RL Simulation/wandb/run-20260427_171215-x4gfcefr
+wandb: Run `wandb offline` to turn off syncing.
+wandb: Syncing run camp_fire_ppo_selfpos
+wandb: ⭐️ View project at https://wandb.ai/vkm9614-nyu/Firefighting%20RL
+wandb: 🚀 View run at https://wandb.ai/vkm9614-nyu/Firefighting%20RL/runs/x4gfcefr
+wandb: Detected [agents] in use.
+wandb: Use W&B Weave for improved LLM call tracing. Install Weave with `pip install weave` then add `import weave` to the top of your script.
+wandb: For more information, check out the docs at: https://weave-docs.wandb.ai/
+[main_train] AGENT_NAME = reference_agent
+[main_train] config_dir = config/
+[main_train] algorithm  = (from config)
+[main_train] timesteps  = (from config)
+Using cpu device
+Wrapping the env with a `Monitor` wrapper
+Wrapping the env in a DummyVecEnv.
+[train] Starting PPO training for 100000 timesteps …
+[train] GIFs will be recorded every 10000 steps
+----------------------------
+| time/              |     |
+|    fps             | 58  |
+|    iterations      | 1   |
+|    time_elapsed    | 8   |
+|    total_timesteps | 512 |
+----------------------------
+-----------------------------------------
+| time/                   |             |
+|    fps                  | 50          |
+|    iterations           | 2           |
+|    time_elapsed         | 20          |
+|    total_timesteps      | 1024        |
+| train/                  |             |
+|    approx_kl            | 0.016110279 |
+|    clip_fraction        | 0.214       |
+|    clip_range           | 0.2         |
+|    entropy_loss         | -2.99       |
+|    explained_variance   | 0.00082     |
+|    learning_rate        | 0.0003      |
+|    loss                 | 42.3        |
+|    n_updates            | 10          |
+|    policy_gradient_loss | -0.0173     |
+|    value_loss           | 115         |
+-----------------------------------------
+-------------------------------------------
+| time/                   |               |
+|    fps                  | 48            |
+|    iterations           | 3             |
+|    time_elapsed         | 31            |
+|    total_timesteps      | 1536          |
+| train/                  |               |
+|    approx_kl            | 0.00014681753 |
+|    clip_fraction        | 0             |
+|    clip_range           | 0.2           |
+|    entropy_loss         | -2.98         |
+|    explained_variance   | 5.96e-08      |
+|    learning_rate        | 0.0003        |
+|    loss                 | 3.49e+06      |
+|    n_updates            | 20            |
+|    policy_gradient_loss | -0.000598     |
+|    value_loss           | 8.21e+06      |
+-------------------------------------------
+------------------------------------------
+| time/                   |              |
+|    fps                  | 47           |
+|    iterations           | 4            |
+|    time_elapsed         | 42           |
+|    total_timesteps      | 2048         |
+| train/                  |              |
+|    approx_kl            | 5.262089e-06 |
+|    clip_fraction        | 0            |
+|    clip_range           | 0.2          |
+|    entropy_loss         | -2.98        |
+|    explained_variance   | 0            |
+|    learning_rate        | 0.0003       |
+|    loss                 | 1.06e+07     |
+|    n_updates            | 30           |
+|    policy_gradient_loss | -0.000115    |
+|    value_loss           | 2.54e+07     |
+------------------------------------------
+-------------------------------------------
+| time/                   |               |
+|    fps                  | 47            |
+|    iterations           | 5             |
+|    time_elapsed         | 53            |
+|    total_timesteps      | 2560          |
+| train/                  |               |
+|    approx_kl            | 0.00070735184 |
+|    clip_fraction        | 0             |
+|    clip_range           | 0.2           |
+|    entropy_loss         | -2.98         |
+|    explained_variance   | 0             |
+|    learning_rate        | 0.0003        |
+|    loss                 | 7.93e+06      |
+|    n_updates            | 40            |
+|    policy_gradient_loss | -0.00198      |
+|    value_loss           | 1.26e+07      |
+-------------------------------------------
+/Library/Frameworks/Python.framework/Versions/3.9/lib/python3.9/multiprocessing/resource_tracker.py:216: UserWarning: resource_tracker: There appear to be 2 leaked semaphore objects to clean up at shutdown
+  warnings.warn('resource_tracker: There appear to be %d '
