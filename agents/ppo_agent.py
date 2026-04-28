@@ -103,7 +103,7 @@ class PPOAgent(BaseAgent):
         )
 
     def get_action(self, obs: np.ndarray) -> int:
-        action, _ = self.model.predict(obs, deterministic=True)
+        action, _ = self.model.predict(obs, deterministic=False)
         return int(action)
 
     def train(self, total_timesteps: int, callbacks: Optional[List[Any]] = None) -> None:

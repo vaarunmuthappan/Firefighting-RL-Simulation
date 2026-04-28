@@ -65,35 +65,59 @@ _GROWTH_PENALTY_PER_CELL: float = 50.0
 # Population penalty per person in a newly burned cell
 _POP_PENALTY_PER_PERSON: float = 100.0
 
-# Timestep penalty: small if near fire, larger if idling far away
-_STEP_PENALTY_NEAR:  float = -1.0
-_STEP_PENALTY_FAR:   float = -5.0
+# Timestep penalty: 3-tier based on proximity to active fire front.
+# ≤2 cells: minimal penalty  — agent is right at the fire edge, fully engaged
+# ≤5 cells: moderate penalty — agent is near the fire
+# >5 cells: large penalty    — agent is far from fire, idling / lost in burned area
+_CLOSE_RADIUS:       int   = 2
+_STEP_PENALTY_CLOSE: float =  0.0   # ≤2 cells: right at fire — no penalty
+_STEP_PENALTY_NEAR:  float = -0.5   # ≤5 cells: near fire
+_STEP_PENALTY_FAR:   float = -2.0   # >5 cells: far from fire / idling
+# Reduced from (-0.5/-2/-5) so the approach reward (+3/cell) always wins:
+# moving 1 cell closer from far away = +3 approach - 2 step = +1 net reward.
 
 
 def fighting_fire_step_penalty(agent_positions: list, fire_map: np.ndarray) -> float:
-    """Conditional timestep penalty applied every agent step.
+    """3-tier conditional timestep penalty applied every agent step.
 
-    Returns -1 if any agent is within PROXIMITY_RADIUS cells of a burning
-    cell, otherwise -5.  This replaces the flat -1000/step that dominated
-    previous training and made fire-fighting indistinguishable from idling.
+    Finds the distance from the agent to the nearest BURNING cell and returns:
+      ≤2 cells: -0.5  (engaged — right at the fire edge)
+      ≤5 cells: -2.0  (near fire)
+      >5 cells: -5.0  (far from fire, idling)
+
+    Called with a single-agent position list so each agent gets its own
+    individual incentive — no free-rider effect.
 
     Args:
-        agent_positions: List of [row, col] positions for all agents.
+        agent_positions: List of [row, col] (typically 1 element: current agent).
         fire_map: 2D int array of BurnStatus values.
 
     Returns:
-        -1.0 or -5.0.
+        Scalar step penalty.
     """
     rows, cols = fire_map.shape
+    min_dist = float("inf")
     for pos in agent_positions:
         r, c = int(pos[0]), int(pos[1])
+        # Search within the far radius to find the closest burning cell
         r0 = max(0, r - PROXIMITY_RADIUS)
         r1 = min(rows, r + PROXIMITY_RADIUS + 1)
         c0 = max(0, c - PROXIMITY_RADIUS)
         c1 = min(cols, c + PROXIMITY_RADIUS + 1)
-        if np.any(fire_map[r0:r1, c0:c1] == _BURNING):
-            return _STEP_PENALTY_NEAR
-    return _STEP_PENALTY_FAR
+        sub_fire = fire_map[r0:r1, c0:c1] == _BURNING
+        if np.any(sub_fire):
+            fire_rs, fire_cs = np.where(sub_fire)
+            fire_rs = fire_rs + r0
+            fire_cs = fire_cs + c0
+            dists = np.sqrt((fire_rs - r) ** 2.0 + (fire_cs - c) ** 2.0)
+            min_dist = min(min_dist, float(dists.min()))
+
+    if min_dist <= _CLOSE_RADIUS:
+        return _STEP_PENALTY_CLOSE
+    elif min_dist <= PROXIMITY_RADIUS:
+        return _STEP_PENALTY_NEAR
+    else:
+        return _STEP_PENALTY_FAR
 
 
 def fighting_fire_round_reward(

@@ -16,35 +16,21 @@ wind_speed: 2
 wind_direction: 135.0
 moisture: 0.03
 
-# Observation channels
-# agent_row_norm / agent_col_norm: CONSTANT-VALUE channels — every pixel in the
-#   channel is set to the agent's normalised row (or col) coordinate [0,1].
-#   Because the value is spatially uniform, 4× downsampling leaves it unchanged.
-#   This is the robust fix for independent multi-agent behaviour: trucks at
-#   (49,38) and (49,39) map to the same downsampled pixel, so a sparse binary
-#   self_pos channel would look identical after downsampling. A constant channel
-#   of 0.487 vs 0.486 is always distinguishable regardless of downsampling.
-# other_agents: binary spatial — 1.0 at every OTHER agent's cell; gives the
-#   policy awareness of teammates for spreading out.
-attributes:
-  - fire_map
-  - elevation
-  - w_0
-  - sigma
-  - delta
-  - M_x
-  - agent_row_norm
-  - agent_col_norm
-  - other_agents
-normalized_attributes:
-  - elevation
-  - w_0
-  - sigma
-  - delta
-  - M_x
-  - agent_row_norm
-  - agent_col_norm
-  - other_agents
+# Observation: 220×220 centred window downsampled 4× → 55×55, 8 channels.
+#   0: fire_map       — normalised burn/mitigation status [0,1]
+#   1: fire_ahead_1   — binary: cells burning at fire_timestep+1 (3 h)
+#   2: fire_ahead_2   — binary: cells burning at fire_timestep+2 (6 h)
+#   3: fire_ahead_3   — binary: cells burning at fire_timestep+3 (9 h)
+#   4: fire_ahead_4   — binary: cells burning at fire_timestep+4 (12 h)
+#   5: other_agents   — binary: 1.0 at every other agent's position
+#   6: mitigation     — binary: 1.0 where any mitigation type exists
+#   7: agent_id_norm  — constant = agent_idx/(num_agents-1); unique per agent
+#
+# 220 > grid diagonal (~147 cells): entire fire always visible from any pos.
+# Agent-ID channel breaks symmetry: co-located agents see different channel-7
+# values → different policy outputs → role specialisation without coordination.
+obs_window_size: 220
+obs_downsample: 4
 
 # Episode settings — shorter episodes = more training signal per hour
 max_episode_steps: 5000

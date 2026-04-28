@@ -227,7 +227,7 @@ class GifRecorderCallback(BaseCallback):
         stations = getattr(gif_env, "stations", [])
 
         while not done:
-            action, _ = self.model.predict(obs, deterministic=True)
+            action, _ = self.model.predict(obs, deterministic=False)
             obs, reward, terminated, truncated, _ = gif_env.step(int(action))
             total_reward += reward
             done = terminated or truncated

@@ -1,7 +1,7 @@
 # Training configuration — Camp Fire multi-agent, PPO for fast learning
 algorithm: PPO
 policy: CnnPolicy          # CnnPolicy for spatial obs (26x27x8 after 4x downsample)
-total_timesteps: 200000
+total_timesteps: 500000
 
 # PPO hyperparameters (tuned for fewest episodes to learn)
 learning_rate: 0.0003      # 3e-4 — PPO standard, safe with clipped objective
@@ -12,9 +12,9 @@ n_epochs: 10               # reuse each rollout 10× — key for sample efficien
 gamma: 0.99
 gae_lambda: 0.95
 clip_range: 0.2
-ent_coef: 0.001            # reduced from 0.01: explained_variance=0.825 at 40k but entropy
-                           # stuck at max because entropy bonus (0.01×2.96=0.030) was 5×
-                           # larger than policy gradient (-0.006), actively blocking learning
+ent_coef: 0.0              # zero entropy bonus: at 60k steps entropy=2.90 (97% of max,
+                           # near-uniform) despite ent_coef=0.001. Without any bonus the
+                           # policy gradient alone drives entropy down — policy commits faster.
 vf_coef: 0.5
 max_grad_norm: 0.5
 
@@ -23,7 +23,7 @@ checkpoint_freq: 10000
 eval_freq: 10000
 eval_episodes: 3
 experiment_name: Firefighting-RL-DataDriven
-run_name: camp_fire_ppo_selfpos
+run_name: camp_fire_ppo_local
 verbose: 1
 
 # W&B settings
