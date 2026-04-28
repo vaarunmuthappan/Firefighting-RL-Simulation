@@ -1,27 +1,33 @@
-# Training configuration
-algorithm: DQN
-policy: CnnPolicy          # CnnPolicy for image obs, MlpPolicy for flat
-total_timesteps: 50000
-learning_rate: 0.0001
-batch_size: 32
+# Training configuration — Camp Fire multi-agent, PPO for fast learning
+algorithm: PPO
+policy: CnnPolicy          # CnnPolicy for spatial obs (26x27x8 after 4x downsample)
+total_timesteps: 500000
+
+# PPO hyperparameters (tuned for fewest episodes to learn)
+learning_rate: 0.0003      # 3e-4 — PPO standard, safe with clipped objective
+n_steps: 5000              # ~22 fire sub-steps per rollout (15 agents × 5000 / 15 / 36)
+                           # long enough to see mitigation contact reward and growth penalty
+batch_size: 256            # larger mini-batch to match longer rollout
+n_epochs: 10               # reuse each rollout 10× — key for sample efficiency
 gamma: 0.99
-buffer_size: 50000
-train_freq: 4
-target_update_interval: 1000
-exploration_fraction: 0.3
-exploration_final_eps: 0.05
+gae_lambda: 0.95
+clip_range: 0.2
+ent_coef: 0.0              # zero entropy bonus: at 60k steps entropy=2.90 (97% of max,
+                           # near-uniform) despite ent_coef=0.001. Without any bonus the
+                           # policy gradient alone drives entropy down — policy commits faster.
+vf_coef: 0.5
+max_grad_norm: 0.5
+
 checkpoint_dir: checkpoints/
 checkpoint_freq: 10000
 eval_freq: 10000
-eval_episodes: 5
-experiment_name: Firefighting-RL
-run_name: reference_agent
+eval_episodes: 3
+experiment_name: Firefighting-RL-DataDriven
+run_name: camp_fire_ppo_local
 verbose: 1
 
 # W&B settings
 wandb_project: "Firefighting RL"
 
-# GIF recording — logs a visual episode replay every gif_freq steps.
-# Keep this value high to save W&B storage (each GIF is ~1-5 MB).
-# First GIF is recorded at gif_freq (not step 0).
-gif_freq: 25000
+# GIF recording every gif_freq steps
+gif_freq: 10000

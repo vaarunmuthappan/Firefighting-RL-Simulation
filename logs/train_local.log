@@ -1,0 +1,1104 @@
+2026-04-28 09:35:45.811990: I tensorflow/core/platform/cpu_feature_guard.cc:182] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: AVX2 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+Traceback (most recent call last):
+  File "/Library/Frameworks/Python.framework/Versions/3.9/lib/python3.9/site-packages/tensorboard/compat/__init__.py", line 42, in tf
+    from tensorboard.compat import notf  # noqa: F401
+ImportError: cannot import name 'notf' from 'tensorboard.compat' (/Library/Frameworks/Python.framework/Versions/3.9/lib/python3.9/site-packages/tensorboard/compat/__init__.py)
+
+During handling of the above exception, another exception occurred:
+
+AttributeError: 'MessageFactory' object has no attribute 'GetPrototype'
+/Users/vaarun/Library/Python/3.9/lib/python/site-packages/google/auth/__init__.py:54: FutureWarning: You are using a Python version 3.9 past its end of life. Google will update google-auth with critical bug fixes on a best-effort basis, but not with any other fixes or features. Please upgrade your Python version, and then update google-auth.
+  warnings.warn(eol_message.format("3.9"), FutureWarning)
+/Users/vaarun/Library/Python/3.9/lib/python/site-packages/google/oauth2/__init__.py:40: FutureWarning: You are using a Python version 3.9 past its end of life. Google will update google-auth with critical bug fixes on a best-effort basis, but not with any other fixes or features. Please upgrade your Python version, and then update google-auth.
+  warnings.warn(eol_message.format("3.9"), FutureWarning)
+Traceback (most recent call last):
+  File "/Library/Frameworks/Python.framework/Versions/3.9/lib/python3.9/site-packages/tensorboard/compat/__init__.py", line 42, in tf
+    from tensorboard.compat import notf  # noqa: F401
+ImportError: cannot import name 'notf' from 'tensorboard.compat' (/Library/Frameworks/Python.framework/Versions/3.9/lib/python3.9/site-packages/tensorboard/compat/__init__.py)
+
+During handling of the above exception, another exception occurred:
+
+AttributeError: 'MessageFactory' object has no attribute 'GetPrototype'
+/Users/vaarun/Library/Python/3.9/lib/python/site-packages/pydantic/_internal/_config.py:383: UserWarning: Valid config keys have changed in V2:
+* 'allow_mutation' has been removed
+  warnings.warn(message, UserWarning)
+/Users/vaarun/Library/Python/3.9/lib/python/site-packages/networkx/utils/backends.py:135: RuntimeWarning: networkx backend defined more than once: nx-loopback
+  backends.update(_get_backends("networkx.backends"))
+wandb: [wandb.login()] Using explicit session credentials for https://api.wandb.ai.
+wandb: Appending key for api.wandb.ai to your netrc file: /Users/vaarun/.netrc
+wandb: Currently logged in as: vkm9614 (vkm9614-nyu) to https://api.wandb.ai. Use `wandb login --relogin` to force relogin
+wandb: WARNING Using a boolean value for 'reinit' is deprecated. Use 'return_previous' or 'finish_previous' instead.
+wandb: setting up run 8hxu781d
+wandb: Tracking run with wandb version 0.25.1
+wandb: Run data is saved locally in /Users/vaarun/Desktop/NYU/Spring 2026/RL/Firefighting RL Simulation/wandb/run-20260428_093559-8hxu781d
+wandb: Run `wandb offline` to turn off syncing.
+wandb: Syncing run camp_fire_ppo_local
+wandb: ⭐️ View project at https://wandb.ai/vkm9614-nyu/Firefighting%20RL
+wandb: 🚀 View run at https://wandb.ai/vkm9614-nyu/Firefighting%20RL/runs/8hxu781d
+wandb: Detected [agents] in use.
+wandb: Use W&B Weave for improved LLM call tracing. Install Weave with `pip install weave` then add `import weave` to the top of your script.
+wandb: For more information, check out the docs at: https://weave-docs.wandb.ai/
+/Users/vaarun/Library/Python/3.9/lib/python/site-packages/stable_baselines3/ppo/ppo.py:155: UserWarning: You have specified a mini-batch size of 256, but because the `RolloutBuffer` is of size `n_steps * n_envs = 5000`, after every 19 untruncated mini-batches, there will be a truncated mini-batch of size 136
+We recommend using a `batch_size` that is a factor of `n_steps * n_envs`.
+Info: (n_steps=5000 and n_envs=1)
+  warnings.warn(
+[main_train] AGENT_NAME = reference_agent
+[main_train] config_dir = config/
+[main_train] algorithm  = (from config)
+[main_train] timesteps  = (from config)
+Using cpu device
+Wrapping the env with a `Monitor` wrapper
+Wrapping the env in a DummyVecEnv.
+[train] Starting PPO training for 500000 timesteps …
+[train] GIFs will be recorded every 10000 steps
+---------------------------------
+| rollout/           |          |
+|    ep_len_mean     | 5e+03    |
+|    ep_rew_mean     | 1.62e+03 |
+| time/              |          |
+|    fps             | 202      |
+|    iterations      | 1        |
+|    time_elapsed    | 24       |
+|    total_timesteps | 5000     |
+---------------------------------
+wandb: WARNING `fps` argument does not affect the frame rate of the video when providing a file path or raw bytes.
+[CheckpointCallback] Saved checkpoint: checkpoints/camp_fire_ppo_local_10000_steps.zip
+[GifRecorderCallback] Logged GIF at step 10000 (reward=1396.2, 500 frames)
+-----------------------------------------
+| rollout/                |             |
+|    ep_len_mean          | 5e+03       |
+|    ep_rew_mean          | 1.62e+03    |
+| time/                   |             |
+|    fps                  | 60          |
+|    iterations           | 2           |
+|    time_elapsed         | 164         |
+|    total_timesteps      | 10000       |
+| train/                  |             |
+|    approx_kl            | 0.010434464 |
+|    clip_fraction        | 0.0843      |
+|    clip_range           | 0.2         |
+|    entropy_loss         | -2.99       |
+|    explained_variance   | -0.0139     |
+|    learning_rate        | 0.0003      |
+|    loss                 | 4.22        |
+|    n_updates            | 10          |
+|    policy_gradient_loss | -0.00769    |
+|    value_loss           | 18.9        |
+-----------------------------------------
+-----------------------------------------
+| rollout/                |             |
+|    ep_len_mean          | 3.33e+03    |
+|    ep_rew_mean          | 1.08e+03    |
+| time/                   |             |
+|    fps                  | 57          |
+|    iterations           | 3           |
+|    time_elapsed         | 260         |
+|    total_timesteps      | 15000       |
+| train/                  |             |
+|    approx_kl            | 0.007831639 |
+|    clip_fraction        | 0.0246      |
+|    clip_range           | 0.2         |
+|    entropy_loss         | -2.98       |
+|    explained_variance   | 0.274       |
+|    learning_rate        | 0.0003      |
+|    loss                 | 13.2        |
+|    n_updates            | 20          |
+|    policy_gradient_loss | -0.00419    |
+|    value_loss           | 31          |
+-----------------------------------------
+wandb: WARNING `fps` argument does not affect the frame rate of the video when providing a file path or raw bytes.
+[CheckpointCallback] Saved checkpoint: checkpoints/camp_fire_ppo_local_20000_steps.zip
+[GifRecorderCallback] Logged GIF at step 20000 (reward=1126.0, 500 frames)
+-----------------------------------------
+| rollout/                |             |
+|    ep_len_mean          | 3.75e+03    |
+|    ep_rew_mean          | 1.07e+03    |
+| time/                   |             |
+|    fps                  | 48          |
+|    iterations           | 4           |
+|    time_elapsed         | 414         |
+|    total_timesteps      | 20000       |
+| train/                  |             |
+|    approx_kl            | 0.009337801 |
+|    clip_fraction        | 0.0289      |
+|    clip_range           | 0.2         |
+|    entropy_loss         | -2.98       |
+|    explained_variance   | 0.46        |
+|    learning_rate        | 0.0003      |
+|    loss                 | 8.92        |
+|    n_updates            | 30          |
+|    policy_gradient_loss | -0.00568    |
+|    value_loss           | 21.4        |
+-----------------------------------------
+-----------------------------------------
+| rollout/                |             |
+|    ep_len_mean          | 4e+03       |
+|    ep_rew_mean          | 1.04e+03    |
+| time/                   |             |
+|    fps                  | 48          |
+|    iterations           | 5           |
+|    time_elapsed         | 517         |
+|    total_timesteps      | 25000       |
+| train/                  |             |
+|    approx_kl            | 0.009600462 |
+|    clip_fraction        | 0.0357      |
+|    clip_range           | 0.2         |
+|    entropy_loss         | -2.98       |
+|    explained_variance   | 0.668       |
+|    learning_rate        | 0.0003      |
+|    loss                 | 3.86        |
+|    n_updates            | 40          |
+|    policy_gradient_loss | -0.00795    |
+|    value_loss           | 10.6        |
+-----------------------------------------
+wandb: WARNING `fps` argument does not affect the frame rate of the video when providing a file path or raw bytes.
+[CheckpointCallback] Saved checkpoint: checkpoints/camp_fire_ppo_local_30000_steps.zip
+[GifRecorderCallback] Logged GIF at step 30000 (reward=1582.5, 500 frames)
+-----------------------------------------
+| rollout/                |             |
+|    ep_len_mean          | 4.17e+03    |
+|    ep_rew_mean          | 1.13e+03    |
+| time/                   |             |
+|    fps                  | 45          |
+|    iterations           | 6           |
+|    time_elapsed         | 660         |
+|    total_timesteps      | 30000       |
+| train/                  |             |
+|    approx_kl            | 0.010598781 |
+|    clip_fraction        | 0.0356      |
+|    clip_range           | 0.2         |
+|    entropy_loss         | -2.97       |
+|    explained_variance   | 0.613       |
+|    learning_rate        | 0.0003      |
+|    loss                 | 13          |
+|    n_updates            | 50          |
+|    policy_gradient_loss | -0.00731    |
+|    value_loss           | 23.3        |
+-----------------------------------------
+-----------------------------------------
+| rollout/                |             |
+|    ep_len_mean          | 4.29e+03    |
+|    ep_rew_mean          | 1.17e+03    |
+| time/                   |             |
+|    fps                  | 45          |
+|    iterations           | 7           |
+|    time_elapsed         | 763         |
+|    total_timesteps      | 35000       |
+| train/                  |             |
+|    approx_kl            | 0.010251751 |
+|    clip_fraction        | 0.0579      |
+|    clip_range           | 0.2         |
+|    entropy_loss         | -2.95       |
+|    explained_variance   | 0.607       |
+|    learning_rate        | 0.0003      |
+|    loss                 | 5.51        |
+|    n_updates            | 60          |
+|    policy_gradient_loss | -0.00918    |
+|    value_loss           | 17          |
+-----------------------------------------
+wandb: WARNING `fps` argument does not affect the frame rate of the video when providing a file path or raw bytes.
+[CheckpointCallback] Saved checkpoint: checkpoints/camp_fire_ppo_local_40000_steps.zip
+[GifRecorderCallback] Logged GIF at step 40000 (reward=1424.9, 500 frames)
+-----------------------------------------
+| rollout/                |             |
+|    ep_len_mean          | 4.38e+03    |
+|    ep_rew_mean          | 1.21e+03    |
+| time/                   |             |
+|    fps                  | 44          |
+|    iterations           | 8           |
+|    time_elapsed         | 895         |
+|    total_timesteps      | 40000       |
+| train/                  |             |
+|    approx_kl            | 0.010395288 |
+|    clip_fraction        | 0.048       |
+|    clip_range           | 0.2         |
+|    entropy_loss         | -2.93       |
+|    explained_variance   | 0.702       |
+|    learning_rate        | 0.0003      |
+|    loss                 | 8.32        |
+|    n_updates            | 70          |
+|    policy_gradient_loss | -0.00725    |
+|    value_loss           | 19.5        |
+-----------------------------------------
+----------------------------------------
+| rollout/                |            |
+|    ep_len_mean          | 4.44e+03   |
+|    ep_rew_mean          | 1.17e+03   |
+| time/                   |            |
+|    fps                  | 46         |
+|    iterations           | 9          |
+|    time_elapsed         | 960        |
+|    total_timesteps      | 45000      |
+| train/                  |            |
+|    approx_kl            | 0.00963463 |
+|    clip_fraction        | 0.0608     |
+|    clip_range           | 0.2        |
+|    entropy_loss         | -2.93      |
+|    explained_variance   | 0.733      |
+|    learning_rate        | 0.0003     |
+|    loss                 | 4.39       |
+|    n_updates            | 80         |
+|    policy_gradient_loss | -0.00768   |
+|    value_loss           | 9.2        |
+----------------------------------------
+wandb: WARNING `fps` argument does not affect the frame rate of the video when providing a file path or raw bytes.
+[CheckpointCallback] Saved checkpoint: checkpoints/camp_fire_ppo_local_50000_steps.zip
+[GifRecorderCallback] Logged GIF at step 50000 (reward=1712.0, 500 frames)
+-----------------------------------------
+| rollout/                |             |
+|    ep_len_mean          | 4.5e+03     |
+|    ep_rew_mean          | 1.19e+03    |
+| time/                   |             |
+|    fps                  | 47          |
+|    iterations           | 10          |
+|    time_elapsed         | 1050        |
+|    total_timesteps      | 50000       |
+| train/                  |             |
+|    approx_kl            | 0.009982367 |
+|    clip_fraction        | 0.063       |
+|    clip_range           | 0.2         |
+|    entropy_loss         | -2.94       |
+|    explained_variance   | 0.766       |
+|    learning_rate        | 0.0003      |
+|    loss                 | 6.15        |
+|    n_updates            | 90          |
+|    policy_gradient_loss | -0.00986    |
+|    value_loss           | 11.7        |
+-----------------------------------------
+-----------------------------------------
+| rollout/                |             |
+|    ep_len_mean          | 4.55e+03    |
+|    ep_rew_mean          | 1.2e+03     |
+| time/                   |             |
+|    fps                  | 49          |
+|    iterations           | 11          |
+|    time_elapsed         | 1112        |
+|    total_timesteps      | 55000       |
+| train/                  |             |
+|    approx_kl            | 0.010780178 |
+|    clip_fraction        | 0.088       |
+|    clip_range           | 0.2         |
+|    entropy_loss         | -2.93       |
+|    explained_variance   | 0.76        |
+|    learning_rate        | 0.0003      |
+|    loss                 | 5.36        |
+|    n_updates            | 100         |
+|    policy_gradient_loss | -0.00877    |
+|    value_loss           | 12.5        |
+-----------------------------------------
+wandb: WARNING `fps` argument does not affect the frame rate of the video when providing a file path or raw bytes.
+[CheckpointCallback] Saved checkpoint: checkpoints/camp_fire_ppo_local_60000_steps.zip
+[GifRecorderCallback] Logged GIF at step 60000 (reward=1320.0, 500 frames)
+-----------------------------------------
+| rollout/                |             |
+|    ep_len_mean          | 4.58e+03    |
+|    ep_rew_mean          | 1.22e+03    |
+| time/                   |             |
+|    fps                  | 49          |
+|    iterations           | 12          |
+|    time_elapsed         | 1203        |
+|    total_timesteps      | 60000       |
+| train/                  |             |
+|    approx_kl            | 0.010071796 |
+|    clip_fraction        | 0.0554      |
+|    clip_range           | 0.2         |
+|    entropy_loss         | -2.93       |
+|    explained_variance   | 0.725       |
+|    learning_rate        | 0.0003      |
+|    loss                 | 3.7         |
+|    n_updates            | 110         |
+|    policy_gradient_loss | -0.00782    |
+|    value_loss           | 12.5        |
+-----------------------------------------
+----------------------------------------
+| rollout/                |            |
+|    ep_len_mean          | 4.62e+03   |
+|    ep_rew_mean          | 1.22e+03   |
+| time/                   |            |
+|    fps                  | 51         |
+|    iterations           | 13         |
+|    time_elapsed         | 1261       |
+|    total_timesteps      | 65000      |
+| train/                  |            |
+|    approx_kl            | 0.00841113 |
+|    clip_fraction        | 0.0388     |
+|    clip_range           | 0.2        |
+|    entropy_loss         | -2.92      |
+|    explained_variance   | 0.761      |
+|    learning_rate        | 0.0003     |
+|    loss                 | 5.35       |
+|    n_updates            | 120        |
+|    policy_gradient_loss | -0.00738   |
+|    value_loss           | 14.7       |
+----------------------------------------
+wandb: WARNING `fps` argument does not affect the frame rate of the video when providing a file path or raw bytes.
+[CheckpointCallback] Saved checkpoint: checkpoints/camp_fire_ppo_local_70000_steps.zip
+[GifRecorderCallback] Logged GIF at step 70000 (reward=1684.5, 500 frames)
+-----------------------------------------
+| rollout/                |             |
+|    ep_len_mean          | 4.64e+03    |
+|    ep_rew_mean          | 1.26e+03    |
+| time/                   |             |
+|    fps                  | 51          |
+|    iterations           | 14          |
+|    time_elapsed         | 1352        |
+|    total_timesteps      | 70000       |
+| train/                  |             |
+|    approx_kl            | 0.009353867 |
+|    clip_fraction        | 0.0478      |
+|    clip_range           | 0.2         |
+|    entropy_loss         | -2.9        |
+|    explained_variance   | 0.736       |
+|    learning_rate        | 0.0003      |
+|    loss                 | 15.6        |
+|    n_updates            | 130         |
+|    policy_gradient_loss | -0.00785    |
+|    value_loss           | 25.4        |
+-----------------------------------------
+-----------------------------------------
+| rollout/                |             |
+|    ep_len_mean          | 4.67e+03    |
+|    ep_rew_mean          | 1.27e+03    |
+| time/                   |             |
+|    fps                  | 53          |
+|    iterations           | 15          |
+|    time_elapsed         | 1409        |
+|    total_timesteps      | 75000       |
+| train/                  |             |
+|    approx_kl            | 0.010176989 |
+|    clip_fraction        | 0.0851      |
+|    clip_range           | 0.2         |
+|    entropy_loss         | -2.9        |
+|    explained_variance   | 0.742       |
+|    learning_rate        | 0.0003      |
+|    loss                 | 7.04        |
+|    n_updates            | 140         |
+|    policy_gradient_loss | -0.0111     |
+|    value_loss           | 16.7        |
+-----------------------------------------
+wandb: WARNING `fps` argument does not affect the frame rate of the video when providing a file path or raw bytes.
+[CheckpointCallback] Saved checkpoint: checkpoints/camp_fire_ppo_local_80000_steps.zip
+[GifRecorderCallback] Logged GIF at step 80000 (reward=1260.3, 500 frames)
+------------------------------------------
+| rollout/                |              |
+|    ep_len_mean          | 4.69e+03     |
+|    ep_rew_mean          | 1.31e+03     |
+| time/                   |              |
+|    fps                  | 53           |
+|    iterations           | 16           |
+|    time_elapsed         | 1503         |
+|    total_timesteps      | 80000        |
+| train/                  |              |
+|    approx_kl            | 0.0107912375 |
+|    clip_fraction        | 0.0656       |
+|    clip_range           | 0.2          |
+|    entropy_loss         | -2.9         |
+|    explained_variance   | 0.799        |
+|    learning_rate        | 0.0003       |
+|    loss                 | 6.86         |
+|    n_updates            | 150          |
+|    policy_gradient_loss | -0.0101      |
+|    value_loss           | 19.7         |
+------------------------------------------
+----------------------------------------
+| rollout/                |            |
+|    ep_len_mean          | 4.71e+03   |
+|    ep_rew_mean          | 1.35e+03   |
+| time/                   |            |
+|    fps                  | 54         |
+|    iterations           | 17         |
+|    time_elapsed         | 1570       |
+|    total_timesteps      | 85000      |
+| train/                  |            |
+|    approx_kl            | 0.00904252 |
+|    clip_fraction        | 0.0539     |
+|    clip_range           | 0.2        |
+|    entropy_loss         | -2.91      |
+|    explained_variance   | 0.798      |
+|    learning_rate        | 0.0003     |
+|    loss                 | 14.3       |
+|    n_updates            | 160        |
+|    policy_gradient_loss | -0.00829   |
+|    value_loss           | 18.4       |
+----------------------------------------
+wandb: WARNING `fps` argument does not affect the frame rate of the video when providing a file path or raw bytes.
+[CheckpointCallback] Saved checkpoint: checkpoints/camp_fire_ppo_local_90000_steps.zip
+[GifRecorderCallback] Logged GIF at step 90000 (reward=1166.3, 500 frames)
+-----------------------------------------
+| rollout/                |             |
+|    ep_len_mean          | 4.72e+03    |
+|    ep_rew_mean          | 1.35e+03    |
+| time/                   |             |
+|    fps                  | 54          |
+|    iterations           | 18          |
+|    time_elapsed         | 1663        |
+|    total_timesteps      | 90000       |
+| train/                  |             |
+|    approx_kl            | 0.011484017 |
+|    clip_fraction        | 0.0793      |
+|    clip_range           | 0.2         |
+|    entropy_loss         | -2.92       |
+|    explained_variance   | 0.778       |
+|    learning_rate        | 0.0003      |
+|    loss                 | 4.2         |
+|    n_updates            | 170         |
+|    policy_gradient_loss | -0.0072     |
+|    value_loss           | 9.49        |
+-----------------------------------------
+-----------------------------------------
+| rollout/                |             |
+|    ep_len_mean          | 4.74e+03    |
+|    ep_rew_mean          | 1.33e+03    |
+| time/                   |             |
+|    fps                  | 55          |
+|    iterations           | 19          |
+|    time_elapsed         | 1723        |
+|    total_timesteps      | 95000       |
+| train/                  |             |
+|    approx_kl            | 0.010637919 |
+|    clip_fraction        | 0.093       |
+|    clip_range           | 0.2         |
+|    entropy_loss         | -2.9        |
+|    explained_variance   | 0.817       |
+|    learning_rate        | 0.0003      |
+|    loss                 | 1.08        |
+|    n_updates            | 180         |
+|    policy_gradient_loss | -0.0117     |
+|    value_loss           | 5.83        |
+-----------------------------------------
+wandb: WARNING `fps` argument does not affect the frame rate of the video when providing a file path or raw bytes.
+[CheckpointCallback] Saved checkpoint: checkpoints/camp_fire_ppo_local_100000_steps.zip
+[GifRecorderCallback] Logged GIF at step 100000 (reward=1546.8, 500 frames)
+-----------------------------------------
+| rollout/                |             |
+|    ep_len_mean          | 4.75e+03    |
+|    ep_rew_mean          | 1.31e+03    |
+| time/                   |             |
+|    fps                  | 55          |
+|    iterations           | 20          |
+|    time_elapsed         | 1816        |
+|    total_timesteps      | 100000      |
+| train/                  |             |
+|    approx_kl            | 0.009744456 |
+|    clip_fraction        | 0.0819      |
+|    clip_range           | 0.2         |
+|    entropy_loss         | -2.9        |
+|    explained_variance   | 0.818       |
+|    learning_rate        | 0.0003      |
+|    loss                 | 5.08        |
+|    n_updates            | 190         |
+|    policy_gradient_loss | -0.0121     |
+|    value_loss           | 9.91        |
+-----------------------------------------
+-----------------------------------------
+| rollout/                |             |
+|    ep_len_mean          | 4.76e+03    |
+|    ep_rew_mean          | 1.3e+03     |
+| time/                   |             |
+|    fps                  | 55          |
+|    iterations           | 21          |
+|    time_elapsed         | 1882        |
+|    total_timesteps      | 105000      |
+| train/                  |             |
+|    approx_kl            | 0.010756934 |
+|    clip_fraction        | 0.0884      |
+|    clip_range           | 0.2         |
+|    entropy_loss         | -2.9        |
+|    explained_variance   | 0.841       |
+|    learning_rate        | 0.0003      |
+|    loss                 | 1.73        |
+|    n_updates            | 200         |
+|    policy_gradient_loss | -0.00944    |
+|    value_loss           | 8.07        |
+-----------------------------------------
+wandb: WARNING `fps` argument does not affect the frame rate of the video when providing a file path or raw bytes.
+[CheckpointCallback] Saved checkpoint: checkpoints/camp_fire_ppo_local_110000_steps.zip
+[GifRecorderCallback] Logged GIF at step 110000 (reward=1500.9, 500 frames)
+---------------------------------------
+| rollout/                |           |
+|    ep_len_mean          | 4.77e+03  |
+|    ep_rew_mean          | 1.28e+03  |
+| time/                   |           |
+|    fps                  | 55        |
+|    iterations           | 22        |
+|    time_elapsed         | 1987      |
+|    total_timesteps      | 110000    |
+| train/                  |           |
+|    approx_kl            | 0.0089861 |
+|    clip_fraction        | 0.0659    |
+|    clip_range           | 0.2       |
+|    entropy_loss         | -2.88     |
+|    explained_variance   | 0.823     |
+|    learning_rate        | 0.0003    |
+|    loss                 | 1.7       |
+|    n_updates            | 210       |
+|    policy_gradient_loss | -0.0101   |
+|    value_loss           | 6.07      |
+---------------------------------------
+-----------------------------------------
+| rollout/                |             |
+|    ep_len_mean          | 4.78e+03    |
+|    ep_rew_mean          | 1.27e+03    |
+| time/                   |             |
+|    fps                  | 55          |
+|    iterations           | 23          |
+|    time_elapsed         | 2054        |
+|    total_timesteps      | 115000      |
+| train/                  |             |
+|    approx_kl            | 0.009421408 |
+|    clip_fraction        | 0.0731      |
+|    clip_range           | 0.2         |
+|    entropy_loss         | -2.87       |
+|    explained_variance   | 0.846       |
+|    learning_rate        | 0.0003      |
+|    loss                 | 2.01        |
+|    n_updates            | 220         |
+|    policy_gradient_loss | -0.0105     |
+|    value_loss           | 6.95        |
+-----------------------------------------
+wandb: WARNING `fps` argument does not affect the frame rate of the video when providing a file path or raw bytes.
+[CheckpointCallback] Saved checkpoint: checkpoints/camp_fire_ppo_local_120000_steps.zip
+[GifRecorderCallback] Logged GIF at step 120000 (reward=996.2, 500 frames)
+----------------------------------------
+| rollout/                |            |
+|    ep_len_mean          | 4.79e+03   |
+|    ep_rew_mean          | 1.26e+03   |
+| time/                   |            |
+|    fps                  | 55         |
+|    iterations           | 24         |
+|    time_elapsed         | 2157       |
+|    total_timesteps      | 120000     |
+| train/                  |            |
+|    approx_kl            | 0.01009758 |
+|    clip_fraction        | 0.091      |
+|    clip_range           | 0.2        |
+|    entropy_loss         | -2.86      |
+|    explained_variance   | 0.82       |
+|    learning_rate        | 0.0003     |
+|    loss                 | 1.87       |
+|    n_updates            | 230        |
+|    policy_gradient_loss | -0.0115    |
+|    value_loss           | 6.12       |
+----------------------------------------
+-----------------------------------------
+| rollout/                |             |
+|    ep_len_mean          | 4.8e+03     |
+|    ep_rew_mean          | 1.24e+03    |
+| time/                   |             |
+|    fps                  | 56          |
+|    iterations           | 25          |
+|    time_elapsed         | 2224        |
+|    total_timesteps      | 125000      |
+| train/                  |             |
+|    approx_kl            | 0.008334953 |
+|    clip_fraction        | 0.0602      |
+|    clip_range           | 0.2         |
+|    entropy_loss         | -2.85       |
+|    explained_variance   | 0.805       |
+|    learning_rate        | 0.0003      |
+|    loss                 | 2.3         |
+|    n_updates            | 240         |
+|    policy_gradient_loss | -0.00967    |
+|    value_loss           | 7.13        |
+-----------------------------------------
+wandb: WARNING `fps` argument does not affect the frame rate of the video when providing a file path or raw bytes.
+[CheckpointCallback] Saved checkpoint: checkpoints/camp_fire_ppo_local_130000_steps.zip
+[GifRecorderCallback] Logged GIF at step 130000 (reward=913.7, 500 frames)
+-----------------------------------------
+| rollout/                |             |
+|    ep_len_mean          | 4.81e+03    |
+|    ep_rew_mean          | 1.23e+03    |
+| time/                   |             |
+|    fps                  | 55          |
+|    iterations           | 26          |
+|    time_elapsed         | 2323        |
+|    total_timesteps      | 130000      |
+| train/                  |             |
+|    approx_kl            | 0.009913649 |
+|    clip_fraction        | 0.082       |
+|    clip_range           | 0.2         |
+|    entropy_loss         | -2.84       |
+|    explained_variance   | 0.802       |
+|    learning_rate        | 0.0003      |
+|    loss                 | 1.41        |
+|    n_updates            | 250         |
+|    policy_gradient_loss | -0.0123     |
+|    value_loss           | 5.45        |
+-----------------------------------------
+-----------------------------------------
+| rollout/                |             |
+|    ep_len_mean          | 4.81e+03    |
+|    ep_rew_mean          | 1.21e+03    |
+| time/                   |             |
+|    fps                  | 56          |
+|    iterations           | 27          |
+|    time_elapsed         | 2386        |
+|    total_timesteps      | 135000      |
+| train/                  |             |
+|    approx_kl            | 0.011483931 |
+|    clip_fraction        | 0.0955      |
+|    clip_range           | 0.2         |
+|    entropy_loss         | -2.84       |
+|    explained_variance   | 0.719       |
+|    learning_rate        | 0.0003      |
+|    loss                 | 1.56        |
+|    n_updates            | 260         |
+|    policy_gradient_loss | -0.0151     |
+|    value_loss           | 5.92        |
+-----------------------------------------
+wandb: WARNING `fps` argument does not affect the frame rate of the video when providing a file path or raw bytes.
+[CheckpointCallback] Saved checkpoint: checkpoints/camp_fire_ppo_local_140000_steps.zip
+[GifRecorderCallback] Logged GIF at step 140000 (reward=756.1, 500 frames)
+-----------------------------------------
+| rollout/                |             |
+|    ep_len_mean          | 4.82e+03    |
+|    ep_rew_mean          | 1.19e+03    |
+| time/                   |             |
+|    fps                  | 56          |
+|    iterations           | 28          |
+|    time_elapsed         | 2482        |
+|    total_timesteps      | 140000      |
+| train/                  |             |
+|    approx_kl            | 0.011203427 |
+|    clip_fraction        | 0.0958      |
+|    clip_range           | 0.2         |
+|    entropy_loss         | -2.84       |
+|    explained_variance   | 0.757       |
+|    learning_rate        | 0.0003      |
+|    loss                 | 0.919       |
+|    n_updates            | 270         |
+|    policy_gradient_loss | -0.013      |
+|    value_loss           | 4.69        |
+-----------------------------------------
+-----------------------------------------
+| rollout/                |             |
+|    ep_len_mean          | 4.83e+03    |
+|    ep_rew_mean          | 1.18e+03    |
+| time/                   |             |
+|    fps                  | 56          |
+|    iterations           | 29          |
+|    time_elapsed         | 2546        |
+|    total_timesteps      | 145000      |
+| train/                  |             |
+|    approx_kl            | 0.012794147 |
+|    clip_fraction        | 0.141       |
+|    clip_range           | 0.2         |
+|    entropy_loss         | -2.86       |
+|    explained_variance   | 0.242       |
+|    learning_rate        | 0.0003      |
+|    loss                 | 1.07        |
+|    n_updates            | 280         |
+|    policy_gradient_loss | -0.0128     |
+|    value_loss           | 3.69        |
+-----------------------------------------
+wandb: WARNING `fps` argument does not affect the frame rate of the video when providing a file path or raw bytes.
+[CheckpointCallback] Saved checkpoint: checkpoints/camp_fire_ppo_local_150000_steps.zip
+[GifRecorderCallback] Logged GIF at step 150000 (reward=711.1, 500 frames)
+-----------------------------------------
+| rollout/                |             |
+|    ep_len_mean          | 4.83e+03    |
+|    ep_rew_mean          | 1.17e+03    |
+| time/                   |             |
+|    fps                  | 56          |
+|    iterations           | 30          |
+|    time_elapsed         | 2644        |
+|    total_timesteps      | 150000      |
+| train/                  |             |
+|    approx_kl            | 0.009514997 |
+|    clip_fraction        | 0.116       |
+|    clip_range           | 0.2         |
+|    entropy_loss         | -2.84       |
+|    explained_variance   | 0.585       |
+|    learning_rate        | 0.0003      |
+|    loss                 | 1.72        |
+|    n_updates            | 290         |
+|    policy_gradient_loss | -0.0111     |
+|    value_loss           | 6.56        |
+-----------------------------------------
+-----------------------------------------
+| rollout/                |             |
+|    ep_len_mean          | 4.84e+03    |
+|    ep_rew_mean          | 1.17e+03    |
+| time/                   |             |
+|    fps                  | 57          |
+|    iterations           | 31          |
+|    time_elapsed         | 2707        |
+|    total_timesteps      | 155000      |
+| train/                  |             |
+|    approx_kl            | 0.009950063 |
+|    clip_fraction        | 0.0845      |
+|    clip_range           | 0.2         |
+|    entropy_loss         | -2.84       |
+|    explained_variance   | 0.74        |
+|    learning_rate        | 0.0003      |
+|    loss                 | 1.06        |
+|    n_updates            | 300         |
+|    policy_gradient_loss | -0.0118     |
+|    value_loss           | 4.68        |
+-----------------------------------------
+wandb: WARNING `fps` argument does not affect the frame rate of the video when providing a file path or raw bytes.
+[CheckpointCallback] Saved checkpoint: checkpoints/camp_fire_ppo_local_160000_steps.zip
+[GifRecorderCallback] Logged GIF at step 160000 (reward=965.9, 500 frames)
+----------------------------------------
+| rollout/                |            |
+|    ep_len_mean          | 4.84e+03   |
+|    ep_rew_mean          | 1.15e+03   |
+| time/                   |            |
+|    fps                  | 57         |
+|    iterations           | 32         |
+|    time_elapsed         | 2806       |
+|    total_timesteps      | 160000     |
+| train/                  |            |
+|    approx_kl            | 0.00866238 |
+|    clip_fraction        | 0.0726     |
+|    clip_range           | 0.2        |
+|    entropy_loss         | -2.82      |
+|    explained_variance   | 0.768      |
+|    learning_rate        | 0.0003     |
+|    loss                 | 1.24       |
+|    n_updates            | 310        |
+|    policy_gradient_loss | -0.0138    |
+|    value_loss           | 3.76       |
+----------------------------------------
+-----------------------------------------
+| rollout/                |             |
+|    ep_len_mean          | 4.85e+03    |
+|    ep_rew_mean          | 1.14e+03    |
+| time/                   |             |
+|    fps                  | 57          |
+|    iterations           | 33          |
+|    time_elapsed         | 2883        |
+|    total_timesteps      | 165000      |
+| train/                  |             |
+|    approx_kl            | 0.009730622 |
+|    clip_fraction        | 0.0859      |
+|    clip_range           | 0.2         |
+|    entropy_loss         | -2.82       |
+|    explained_variance   | 0.751       |
+|    learning_rate        | 0.0003      |
+|    loss                 | 2.46        |
+|    n_updates            | 320         |
+|    policy_gradient_loss | -0.0163     |
+|    value_loss           | 4.21        |
+-----------------------------------------
+wandb: WARNING `fps` argument does not affect the frame rate of the video when providing a file path or raw bytes.
+[CheckpointCallback] Saved checkpoint: checkpoints/camp_fire_ppo_local_170000_steps.zip
+[GifRecorderCallback] Logged GIF at step 170000 (reward=800.4, 500 frames)
+-----------------------------------------
+| rollout/                |             |
+|    ep_len_mean          | 4.85e+03    |
+|    ep_rew_mean          | 1.14e+03    |
+| time/                   |             |
+|    fps                  | 56          |
+|    iterations           | 34          |
+|    time_elapsed         | 3007        |
+|    total_timesteps      | 170000      |
+| train/                  |             |
+|    approx_kl            | 0.010184581 |
+|    clip_fraction        | 0.0903      |
+|    clip_range           | 0.2         |
+|    entropy_loss         | -2.82       |
+|    explained_variance   | 0.761       |
+|    learning_rate        | 0.0003      |
+|    loss                 | 0.816       |
+|    n_updates            | 330         |
+|    policy_gradient_loss | -0.0144     |
+|    value_loss           | 4.24        |
+-----------------------------------------
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             wandb: WARNING `fps` argument does not affect the frame rate of the video when providing a file path or raw bytes.
+[CheckpointCallback] Saved checkpoint: checkpoints/camp_fire_ppo_local_310000_steps.zip
+[GifRecorderCallback] Logged GIF at step 310000 (reward=877.7, 500 frames)
+---------------------------------------
+| rollout/                |           |
+|    ep_len_mean          | 4.92e+03  |
+|    ep_rew_mean          | 1.12e+03  |
+| time/                   |           |
+|    fps                  | 125       |
+|    iterations           | 62        |
+|    time_elapsed         | 2464      |
+|    total_timesteps      | 310000    |
+| train/                  |           |
+|    approx_kl            | 0.0301866 |
+|    clip_fraction        | 0.339     |
+|    clip_range           | 0.2       |
+|    entropy_loss         | -2.67     |
+|    explained_variance   | 0.198     |
+|    learning_rate        | 0.0003    |
+|    loss                 | 0.618     |
+|    n_updates            | 610       |
+|    policy_gradient_loss | -0.0239   |
+|    value_loss           | 5.94      |
+---------------------------------------
+-----------------------------------------
+| rollout/                |             |
+|    ep_len_mean          | 4.92e+03    |
+|    ep_rew_mean          | 1.12e+03    |
+| time/                   |             |
+|    fps                  | 124         |
+|    iterations           | 63          |
+|    time_elapsed         | 2522        |
+|    total_timesteps      | 315000      |
+| train/                  |             |
+|    approx_kl            | 0.028695747 |
+|    clip_fraction        | 0.304       |
+|    clip_range           | 0.2         |
+|    entropy_loss         | -2.64       |
+|    explained_variance   | 0.26        |
+|    learning_rate        | 0.0003      |
+|    loss                 | 1.82        |
+|    n_updates            | 620         |
+|    policy_gradient_loss | -0.0232     |
+|    value_loss           | 6.66        |
+-----------------------------------------
+wandb: WARNING `fps` argument does not affect the frame rate of the video when providing a file path or raw bytes.
+[CheckpointCallback] Saved checkpoint: checkpoints/camp_fire_ppo_local_320000_steps.zip
+[GifRecorderCallback] Logged GIF at step 320000 (reward=1265.5, 500 frames)
+-----------------------------------------
+| rollout/                |             |
+|    ep_len_mean          | 4.92e+03    |
+|    ep_rew_mean          | 1.12e+03    |
+| time/                   |             |
+|    fps                  | 123         |
+|    iterations           | 64          |
+|    time_elapsed         | 2591        |
+|    total_timesteps      | 320000      |
+| train/                  |             |
+|    approx_kl            | 0.028159555 |
+|    clip_fraction        | 0.311       |
+|    clip_range           | 0.2         |
+|    entropy_loss         | -2.68       |
+|    explained_variance   | 0.408       |
+|    learning_rate        | 0.0003      |
+|    loss                 | 0.99        |
+|    n_updates            | 630         |
+|    policy_gradient_loss | -0.0313     |
+|    value_loss           | 5.67        |
+-----------------------------------------
+----------------------------------------
+| rollout/                |            |
+|    ep_len_mean          | 4.92e+03   |
+|    ep_rew_mean          | 1.13e+03   |
+| time/                   |            |
+|    fps                  | 123        |
+|    iterations           | 65         |
+|    time_elapsed         | 2635       |
+|    total_timesteps      | 325000     |
+| train/                  |            |
+|    approx_kl            | 0.02867637 |
+|    clip_fraction        | 0.315      |
+|    clip_range           | 0.2        |
+|    entropy_loss         | -2.62      |
+|    explained_variance   | 0.371      |
+|    learning_rate        | 0.0003     |
+|    loss                 | 1.47       |
+|    n_updates            | 640        |
+|    policy_gradient_loss | -0.0194    |
+|    value_loss           | 7.36       |
+----------------------------------------
+wandb: WARNING `fps` argument does not affect the frame rate of the video when providing a file path or raw bytes.
+[CheckpointCallback] Saved checkpoint: checkpoints/camp_fire_ppo_local_330000_steps.zip
+[GifRecorderCallback] Logged GIF at step 330000 (reward=774.2, 500 frames)
+----------------------------------------
+| rollout/                |            |
+|    ep_len_mean          | 4.92e+03   |
+|    ep_rew_mean          | 1.13e+03   |
+| time/                   |            |
+|    fps                  | 120        |
+|    iterations           | 66         |
+|    time_elapsed         | 2731       |
+|    total_timesteps      | 330000     |
+| train/                  |            |
+|    approx_kl            | 0.03209906 |
+|    clip_fraction        | 0.348      |
+|    clip_range           | 0.2        |
+|    entropy_loss         | -2.63      |
+|    explained_variance   | 0.386      |
+|    learning_rate        | 0.0003     |
+|    loss                 | 0.758      |
+|    n_updates            | 650        |
+|    policy_gradient_loss | -0.0234    |
+|    value_loss           | 7.09       |
+----------------------------------------
+----------------------------------------
+| rollout/                |            |
+|    ep_len_mean          | 4.93e+03   |
+|    ep_rew_mean          | 1.13e+03   |
+| time/                   |            |
+|    fps                  | 120        |
+|    iterations           | 67         |
+|    time_elapsed         | 2784       |
+|    total_timesteps      | 335000     |
+| train/                  |            |
+|    approx_kl            | 0.03175523 |
+|    clip_fraction        | 0.334      |
+|    clip_range           | 0.2        |
+|    entropy_loss         | -2.62      |
+|    explained_variance   | 0.466      |
+|    learning_rate        | 0.0003     |
+|    loss                 | 0.673      |
+|    n_updates            | 660        |
+|    policy_gradient_loss | -0.0293    |
+|    value_loss           | 5.75       |
+----------------------------------------
+wandb: WARNING `fps` argument does not affect the frame rate of the video when providing a file path or raw bytes.
+[CheckpointCallback] Saved checkpoint: checkpoints/camp_fire_ppo_local_340000_steps.zip
+[GifRecorderCallback] Logged GIF at step 340000 (reward=1191.3, 500 frames)
+-----------------------------------------
+| rollout/                |             |
+|    ep_len_mean          | 4.93e+03    |
+|    ep_rew_mean          | 1.12e+03    |
+| time/                   |             |
+|    fps                  | 118         |
+|    iterations           | 68          |
+|    time_elapsed         | 2860        |
+|    total_timesteps      | 340000      |
+| train/                  |             |
+|    approx_kl            | 0.026917478 |
+|    clip_fraction        | 0.306       |
+|    clip_range           | 0.2         |
+|    entropy_loss         | -2.61       |
+|    explained_variance   | 0.412       |
+|    learning_rate        | 0.0003      |
+|    loss                 | 1.55        |
+|    n_updates            | 670         |
+|    policy_gradient_loss | -0.0239     |
+|    value_loss           | 5.85        |
+-----------------------------------------
+----------------------------------------
+| rollout/                |            |
+|    ep_len_mean          | 4.93e+03   |
+|    ep_rew_mean          | 1.12e+03   |
+| time/                   |            |
+|    fps                  | 118        |
+|    iterations           | 69         |
+|    time_elapsed         | 2913       |
+|    total_timesteps      | 345000     |
+| train/                  |            |
+|    approx_kl            | 0.03637127 |
+|    clip_fraction        | 0.367      |
+|    clip_range           | 0.2        |
+|    entropy_loss         | -2.64      |
+|    explained_variance   | 0.396      |
+|    learning_rate        | 0.0003     |
+|    loss                 | 1.39       |
+|    n_updates            | 680        |
+|    policy_gradient_loss | -0.0136    |
+|    value_loss           | 9.46       |
+----------------------------------------
+wandb: WARNING `fps` argument does not affect the frame rate of the video when providing a file path or raw bytes.
+[CheckpointCallback] Saved checkpoint: checkpoints/camp_fire_ppo_local_350000_steps.zip
+[GifRecorderCallback] Logged GIF at step 350000 (reward=960.9, 500 frames)
+-----------------------------------------
+| rollout/                |             |
+|    ep_len_mean          | 4.93e+03    |
+|    ep_rew_mean          | 1.12e+03    |
+| time/                   |             |
+|    fps                  | 116         |
+|    iterations           | 70          |
+|    time_elapsed         | 3005        |
+|    total_timesteps      | 350000      |
+| train/                  |             |
+|    approx_kl            | 0.032232016 |
+|    clip_fraction        | 0.342       |
+|    clip_range           | 0.2         |
+|    entropy_loss         | -2.67       |
+|    explained_variance   | 0.419       |
+|    learning_rate        | 0.0003      |
+|    loss                 | 0.82        |
+|    n_updates            | 690         |
+|    policy_gradient_loss | -0.0286     |
+|    value_loss           | 5.62        |
+-----------------------------------------
+----------------------------------------
+| rollout/                |            |
+|    ep_len_mean          | 4.93e+03   |
+|    ep_rew_mean          | 1.12e+03   |
+| time/                   |            |
+|    fps                  | 116        |
+|    iterations           | 71         |
+|    time_elapsed         | 3046       |
+|    total_timesteps      | 355000     |
+| train/                  |            |
+|    approx_kl            | 0.03176032 |
+|    clip_fraction        | 0.333      |
+|    clip_range           | 0.2        |
+|    entropy_loss         | -2.65      |
+|    explained_variance   | 0.63       |
+|    learning_rate        | 0.0003     |
+|    loss                 | 0.579      |
+|    n_updates            | 700        |
+|    policy_gradient_loss | -0.0345    |
+|    value_loss           | 4.65       |
+----------------------------------------
+wandb: WARNING `fps` argument does not affect the frame rate of the video when providing a file path or raw bytes.
+[CheckpointCallback] Saved checkpoint: checkpoints/camp_fire_ppo_local_360000_steps.zip
+[GifRecorderCallback] Logged GIF at step 360000 (reward=802.3, 500 frames)
+-----------------------------------------
+| rollout/                |             |
+|    ep_len_mean          | 4.93e+03    |
+|    ep_rew_mean          | 1.11e+03    |
+| time/                   |             |
+|    fps                  | 115         |
+|    iterations           | 72          |
+|    time_elapsed         | 3118        |
+|    total_timesteps      | 360000      |
+| train/                  |             |
+|    approx_kl            | 0.029368903 |
+|    clip_fraction        | 0.318       |
+|    clip_range           | 0.2         |
+|    entropy_loss         | -2.65       |
+|    explained_variance   | 0.555       |
+|    learning_rate        | 0.0003      |
+|    loss                 | 1.61        |
+|    n_updates            | 710         |
+|    policy_gradient_loss | -0.033      |
+|    value_loss           | 5.74        |
+-----------------------------------------
+-----------------------------------------
+| rollout/                |             |
+|    ep_len_mean          | 4.93e+03    |
+|    ep_rew_mean          | 1.11e+03    |
+| time/                   |             |
+|    fps                  | 115         |
+|    iterations           | 73          |
+|    time_elapsed         | 3171        |
+|    total_timesteps      | 365000      |
+| train/                  |             |
+|    approx_kl            | 0.030261919 |
+|    clip_fraction        | 0.325       |
+|    clip_range           | 0.2         |
+|    entropy_loss         | -2.65       |
+|    explained_variance   | 0.371       |
+|    learning_rate        | 0.0003      |
+|    loss                 | 0.829       |
+|    n_updates            | 720         |
+|    policy_gradient_loss | -0.0278     |
+|    value_loss           | 5.64        |
+-----------------------------------------
+wandb: WARNING `fps` argument does not affect the frame rate of the video when providing a file path or raw bytes.
+[CheckpointCallback] Saved checkpoint: checkpoints/camp_fire_ppo_local_370000_steps.zip
+[GifRecorderCallback] Logged GIF at step 370000 (reward=716.2, 500 frames)
+--------------------------------------
+| rollout/                |          |
+|    ep_len_mean          | 4.93e+03 |
+|    ep_rew_mean          | 1.1e+03  |
+| time/                   |          |
+|    fps                  | 113      |
+|    iterations           | 74       |
+|    time_elapsed         | 3274     |
+|    total_timesteps      | 370000   |
+| train/                  |          |
+|    approx_kl            | 0.033125 |
+|    clip_fraction        | 0.345    |
+|    clip_range           | 0.2      |
+|    entropy_loss         | -2.67    |
+|    explained_variance   | 0.358    |
+|    learning_rate        | 0.0003   |
+|    loss                 | 0.591    |
+|    n_updates            | 730      |
+|    policy_gradient_loss | -0.0318  |
+|    value_loss           | 5.16     |
+--------------------------------------
+/Library/Frameworks/Python.framework/Versions/3.9/lib/python3.9/multiprocessing/resource_tracker.py:216: UserWarning: resource_tracker: There appear to be 2 leaked semaphore objects to clean up at shutdown
+  warnings.warn('resource_tracker: There appear to be %d '

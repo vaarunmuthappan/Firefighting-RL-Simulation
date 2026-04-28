@@ -1,5 +1,5 @@
-# Agent configuration
-type: DQN              # DQN, PPO, Heuristic
+# Agent configuration (multi-agent fire trucks)
+type: DQN
 movements:
   - up
   - down
@@ -7,6 +7,8 @@ movements:
   - right
 interactions:
   - fireline
-initial_pos: [15, 15]
-randomize_pos: true     # randomize start position each episode
-agent_speed: 9          # fire advances every N agent steps
+  - scratchline
+  - wetline
+initial_pos: [50, 50]
+# Agents start at fire station positions (set in DataDrivenFireEnv)
+# No randomize_pos needed — stations determine start positions

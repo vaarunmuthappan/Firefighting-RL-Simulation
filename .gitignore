@@ -2,8 +2,14 @@
 .env
 
 # Training artifacts
+data/*
+!data/camp_fire_full_arrival_375m.npy
+!data/camp_fire_full_meta.json
+!data/camp_fire_roads_375m.npy
+!data/camp_fire_population_375m.npy
+!data/camp_fire_elevation_375m.npy
+!data/camp_fire_stations.json
 checkpoints/
-data/
 runs/
 outputs/
 *.gif

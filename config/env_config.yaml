@@ -1,24 +1,43 @@
-# Fire environment configuration
-screen_size: 64
+# Data-driven fire environment configuration (Camp Fire, VIIRS data)
+data_dir: data
+fire_arrival_file: camp_fire_full_arrival_375m.npy
+fire_meta_file: camp_fire_full_meta.json
+roads_file: camp_fire_roads_375m.npy
+population_file: camp_fire_population_375m.npy
+stations_file: camp_fire_stations.json
+
+# Terrain (SimFire for elevation/fuel observations only)
+terrain_type: functional   # functional = no LANDFIRE download needed
 pixel_scale: 12
-attributes:
-  - fire_map
-  - elevation
-  - w_0
-  - sigma
-  - delta
-  - M_x
-normalized_attributes:
-  - elevation
-  - w_0
-  - sigma
-  - delta
-  - M_x
-terrain_type: functional   # functional (no download) or operational (LANDFIRE)
+resolution: 30
+landfire_year: 2020
+ros_attenuation: true
 wind_speed: 2
 wind_direction: 135.0
 moisture: 0.03
-fire_position_type: random  # static or random
-max_fire_duration: 4
-headless: true
-max_episode_steps: 2000
+
+# Observation: 220×220 centred window downsampled 4× → 55×55, 8 channels.
+#   0: fire_map       — normalised burn/mitigation status [0,1]
+#   1: fire_ahead_1   — binary: cells burning at fire_timestep+1 (3 h)
+#   2: fire_ahead_2   — binary: cells burning at fire_timestep+2 (6 h)
+#   3: fire_ahead_3   — binary: cells burning at fire_timestep+3 (9 h)
+#   4: fire_ahead_4   — binary: cells burning at fire_timestep+4 (12 h)
+#   5: other_agents   — binary: 1.0 at every other agent's position
+#   6: mitigation     — binary: 1.0 where any mitigation type exists
+#   7: agent_id_norm  — constant = agent_idx/(num_agents-1); unique per agent
+#
+# 220 > grid diagonal (~147 cells): entire fire always visible from any pos.
+# Agent-ID channel breaks symmetry: co-located agents see different channel-7
+# values → different policy outputs → role specialisation without coordination.
+obs_window_size: 220
+obs_downsample: 4
+
+# Episode settings — shorter episodes = more training signal per hour
+max_episode_steps: 5000
+
+# Reward scale: keeps per-step rewards in ±1 range so PPO's value function
+# can converge (raw rewards are ±300k; ×0.001 → ±300 per episode).
+reward_scale: 0.001
+
+# Fire timing: 36 agent sub-steps per 3-hour fire timestep (for proportional spread)
+actions_per_fire_step: 36

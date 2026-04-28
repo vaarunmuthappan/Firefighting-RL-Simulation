@@ -14,6 +14,14 @@ from gymnasium.envs.registration import EnvSpec
 from environment.base_env import BaseFireEnv
 from environment.observation_builder import ObservationBuilder
 from fire_sim.sim_interface import FireSimInterface
+from reward.reward_functions import combined_reward
+
+# Map interaction name -> SimFire BurnStatus integer value
+MITIGATION_MAP: Dict[str, int] = {
+    "fireline": 3,     # BurnStatus.FIRELINE
+    "scratchline": 4,  # BurnStatus.SCRATCHLINE
+    "wetline": 5,      # BurnStatus.WETLINE
+}
 
 
 class FireEnv(BaseFireEnv):
@@ -40,9 +48,12 @@ class FireEnv(BaseFireEnv):
 
     Reward
     ------
-    Per simulation step: ``-(burning_cells / total_cells) * 10`` (range [-10, 0]).
-    On fire extinguished: ``+10`` bonus.
-    On non-simulation steps: ``0``.
+    Per fire step:
+      - Burning RoS penalty: -sum(RoS over all burning cells)
+      - Mitigation contact reward: +sum(attenuation values for mitigation
+        cells edge-adjacent to burning cells)
+    Every step:
+      - Timestep penalty: -1000
     """
 
     metadata = {"render_modes": []}
@@ -52,18 +63,7 @@ class FireEnv(BaseFireEnv):
 
         Args:
             config: Flat dict containing keys from env_config.yaml and
-                agent_config.yaml merged together. Required keys:
-                - screen_size (int)
-                - attributes (list[str])
-                - normalized_attributes (list[str])
-                - movements (list[str])
-                - interactions (list[str])
-                - agent_speed (int)
-                - initial_pos (list[int, int])
-                - randomize_pos (bool)
-                - max_episode_steps (int)
-                - wind_speed, wind_direction, moisture, fire_position_type,
-                  max_fire_duration (passed through to sim)
+                agent_config.yaml merged together.
         """
         super().__init__()
 
@@ -72,8 +72,6 @@ class FireEnv(BaseFireEnv):
         self.attributes: List[str] = list(config.get("attributes", [
             "fire_map", "elevation", "w_0", "sigma", "delta", "M_x"
         ]))
-        # Start from config-provided normalised attributes and always include
-        # fire_map so that its values (0 .. sim_agent_id) are scaled to [0, 1].
         _norm_attrs: List[str] = list(config.get("normalized_attributes", [
             "elevation", "w_0", "sigma", "delta", "M_x"
         ]))
@@ -94,9 +92,13 @@ class FireEnv(BaseFireEnv):
         self.interactions: List[str] = ["none"] + interactions
 
         # sim_agent_id: one above the highest BurnStatus value the sim can return
-        # Base values: 0=UNBURNED, 1=BURNING, 2=BURNED, 3=FIRELINE, …
-        # then one entry per non-"none" interaction, then +1 for the agent
-        self.sim_agent_id: int = 3 + len(self.interactions)  # = 3 + len(interactions_with_none)
+        # Base values: 0=UNBURNED, 1=BURNING, 2=BURNED, 3=FIRELINE, 4=SCRATCHLINE, 5=WETLINE
+        # Agent ID must be above the highest mitigation value used
+        max_mitigation = max(
+            (MITIGATION_MAP.get(name, 3) for name in interactions),
+            default=3,
+        )
+        self.sim_agent_id: int = max_mitigation + 2  # +2 for safety margin
 
         # --- build SimFire ---
         sim_config = FireSimInterface.build_config_dict(
@@ -108,6 +110,11 @@ class FireEnv(BaseFireEnv):
             terrain_type=config.get("terrain_type", "functional"),
             max_fire_duration=config.get("max_fire_duration", 4),
             pixel_scale=config.get("pixel_scale", 12),
+            ros_attenuation=config.get("ros_attenuation", False),
+            latitude=config.get("latitude", 33.03),
+            longitude=config.get("longitude", -116.66),
+            resolution=config.get("resolution", 30),
+            landfire_year=config.get("landfire_year", 2020),
         )
         self.sim = FireSimInterface(sim_config)
 
@@ -238,7 +245,7 @@ class FireEnv(BaseFireEnv):
             pos[1] = max(0, pos[1] - 1)
         elif movement_str == "right":
             pos[1] = min(self.screen_size - 1, pos[1] + 1)
-        # "none" → no change
+        # "none" -> no change
 
         self.agent_pos = pos
 
@@ -248,8 +255,10 @@ class FireEnv(BaseFireEnv):
         is_empty = (cell_value == 0)
 
         if is_empty and interaction_str != "none":
-            # SimFire mitigation update: (col, row, mitigation_type)
-            self.sim.apply_mitigation(self.agent_pos[1], self.agent_pos[0], 3)
+            mitigation_type = MITIGATION_MAP.get(interaction_str, 3)
+            self.sim.apply_mitigation(
+                self.agent_pos[1], self.agent_pos[0], mitigation_type
+            )
 
         # --- update agent position display in sim ---
         self.sim.update_agent_position(self.agent_pos[1], self.agent_pos[0], 0)
@@ -259,17 +268,17 @@ class FireEnv(BaseFireEnv):
         if self.num_steps % self.agent_speed == 0:
             fire_map, is_active = self.sim.step()
             fire_map = np.copy(fire_map)
-            reward = self._calculate_reward(fire_map)
+            ros_grid = self.sim.rate_of_spread
+            reward = combined_reward(fire_map, ros_grid)
         else:
             is_active = True
             fire_map = np.copy(self.sim.fire_map)
 
+        # Always apply timestep penalty
+        reward += -1000.0
+
         # --- stamp agent on fire map ---
         fire_map[self.agent_pos[0]][self.agent_pos[1]] = self.sim_agent_id
-
-        # --- extinguishment bonus ---
-        if not is_active:
-            reward += 10.0
 
         self._is_active = is_active
 
@@ -290,19 +299,6 @@ class FireEnv(BaseFireEnv):
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
-
-    def _calculate_reward(self, fire_map: np.ndarray) -> float:
-        """Compute step reward based on burning area fraction.
-
-        Args:
-            fire_map: 2D array with BurnStatus values (agent may be stamped).
-
-        Returns:
-            Reward in range [-10, 0].
-        """
-        burning = np.count_nonzero(fire_map == 1)
-        total = self.screen_size ** 2
-        return -(burning / total) * 10.0
 
     def _build_observation(
         self, fire_map_override: Optional[np.ndarray] = None

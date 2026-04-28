@@ -4,7 +4,7 @@ Usage
 -----
     python main_train.py
     python main_train.py --config-dir config/
-    python main_train.py --algorithm PPO --timesteps 100000
+    python main_train.py --timesteps 100000
 
 All W&B runs are tagged with AGENT_NAME = "reference_agent".
 """
@@ -37,7 +37,7 @@ def _parse_args() -> argparse.Namespace:
         "--algorithm",
         type=str,
         default=None,
-        choices=["DQN", "PPO"],
+        choices=["DQN"],
         help="Override the algorithm specified in train_config.yaml.",
     )
     parser.add_argument(
@@ -45,6 +45,12 @@ def _parse_args() -> argparse.Namespace:
         type=int,
         default=None,
         help="Override total_timesteps from train_config.yaml.",
+    )
+    parser.add_argument(
+        "--resume",
+        type=str,
+        default=None,
+        help="Path to a checkpoint .zip to resume training from.",
     )
     return parser.parse_args()
 
@@ -60,6 +66,7 @@ def main() -> None:
         config_dir=args.config_dir,
         algorithm=args.algorithm,
         total_timesteps=args.timesteps,
+        resume_from=args.resume,
     )
 
 

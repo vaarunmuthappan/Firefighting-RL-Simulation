@@ -12,7 +12,7 @@ import yaml
 
 from agents.dqn_agent import DQNAgent
 from agents.ppo_agent import PPOAgent
-from environment.fire_env import FireEnv
+from environment.data_fire_env import DataDrivenFireEnv
 from training.callbacks import CheckpointCallback, EvalCallback
 from training.evaluate import evaluate_agent
 from utils.logger import WandbLogger, SB3WandbCallback, GifRecorderCallback
@@ -28,6 +28,7 @@ def train(
     config_dir: str = "config/",
     algorithm: Optional[str] = None,
     total_timesteps: Optional[int] = None,
+    resume_from: Optional[str] = None,
 ) -> None:
     """End-to-end training pipeline with W&B tracking.
 
@@ -89,30 +90,60 @@ def train(
         # ------------------------------------------------------------------
         # 3. Build environment
         # ------------------------------------------------------------------
-        env = FireEnv(merged_env_cfg)
+        env = DataDrivenFireEnv(merged_env_cfg)
 
         # ------------------------------------------------------------------
         # 4. Build agent
         # ------------------------------------------------------------------
-        agent_model_cfg = {
-            "policy": train_cfg.get("policy", "CnnPolicy"),
-            "learning_rate": float(train_cfg.get("learning_rate", 1e-4)),
-            "buffer_size": int(train_cfg.get("buffer_size", 50000)),
-            "batch_size": int(train_cfg.get("batch_size", 32)),
-            "gamma": float(train_cfg.get("gamma", 0.99)),
-            "train_freq": int(train_cfg.get("train_freq", 4)),
-            "target_update_interval": int(train_cfg.get("target_update_interval", 1000)),
-            "exploration_fraction": float(train_cfg.get("exploration_fraction", 0.3)),
-            "exploration_final_eps": float(train_cfg.get("exploration_final_eps", 0.05)),
-            "verbose": int(train_cfg.get("verbose", 1)),
-        }
-
-        if algo_name == "DQN":
-            agent = DQNAgent(env, agent_model_cfg)
-        elif algo_name == "PPO":
+        if algo_name == "PPO":
+            agent_model_cfg = {
+                "policy": train_cfg.get("policy", "CnnPolicy"),
+                "learning_rate": float(train_cfg.get("learning_rate", 3e-4)),
+                "n_steps": int(train_cfg.get("n_steps", 512)),
+                "batch_size": int(train_cfg.get("batch_size", 64)),
+                "n_epochs": int(train_cfg.get("n_epochs", 10)),
+                "gamma": float(train_cfg.get("gamma", 0.99)),
+                "gae_lambda": float(train_cfg.get("gae_lambda", 0.95)),
+                "clip_range": float(train_cfg.get("clip_range", 0.2)),
+                "ent_coef": float(train_cfg.get("ent_coef", 0.01)),
+                "vf_coef": float(train_cfg.get("vf_coef", 0.5)),
+                "max_grad_norm": float(train_cfg.get("max_grad_norm", 0.5)),
+                "verbose": int(train_cfg.get("verbose", 1)),
+            }
             agent = PPOAgent(env, agent_model_cfg)
+        elif algo_name == "DQN":
+            agent_model_cfg = {
+                "policy": train_cfg.get("policy", "CnnPolicy"),
+                "learning_rate": float(train_cfg.get("learning_rate", 1e-4)),
+                "buffer_size": int(train_cfg.get("buffer_size", 10000)),
+                "batch_size": int(train_cfg.get("batch_size", 32)),
+                "gamma": float(train_cfg.get("gamma", 0.99)),
+                "train_freq": int(train_cfg.get("train_freq", 4)),
+                "target_update_interval": int(train_cfg.get("target_update_interval", 1000)),
+                "exploration_fraction": float(train_cfg.get("exploration_fraction", 0.3)),
+                "exploration_final_eps": float(train_cfg.get("exploration_final_eps", 0.05)),
+                "verbose": int(train_cfg.get("verbose", 1)),
+            }
+            agent = DQNAgent(env, agent_model_cfg)
         else:
-            raise ValueError(f"Unknown algorithm '{algo_name}'.")
+            raise ValueError(f"Unknown algorithm '{algo_name}'. Supported: 'DQN', 'PPO'.")
+
+        # Resume from checkpoint if specified
+        resume_step = 0
+        if resume_from is not None:
+            print(f"[train] Resuming from checkpoint: {resume_from}")
+            agent.load(resume_from)
+            # Parse step count from filename like "reference_agent_20000_steps.zip"
+            import re
+            m = re.search(r"_(\d+)_steps", resume_from)
+            if m:
+                resume_step = int(m.group(1))
+            remaining = timesteps - resume_step
+            if remaining <= 0:
+                print(f"[train] Already completed {resume_step} steps (target {timesteps}). Nothing to do.")
+                return
+            timesteps = remaining
+            print(f"[train] Resuming from step {resume_step}, {timesteps} steps remaining")
 
         # ------------------------------------------------------------------
         # 5. Build callbacks
@@ -125,7 +156,7 @@ def train(
             wandb_logger=logger,
         )
         gif_cb = GifRecorderCallback(
-            env_config=merged_env_cfg,
+            train_env=env,
             wandb_logger=logger,
             gif_freq=gif_freq,
         )
@@ -152,7 +183,7 @@ def train(
         # 8. Evaluate
         # ------------------------------------------------------------------
         print(f"[train] Running evaluation over {eval_episodes} episodes …")
-        eval_env = FireEnv(merged_env_cfg)
+        eval_env = DataDrivenFireEnv(merged_env_cfg)
         eval_results = evaluate_agent(agent, eval_env, num_episodes=eval_episodes)
         print(
             f"[train] Eval results: "
@@ -188,12 +219,16 @@ def train(
             import tempfile
             from PIL import Image as PILImage
 
-            gif_env = FireEnv(merged_env_cfg)
+            from PIL import ImageDraw
+            gif_env = DataDrivenFireEnv(merged_env_cfg)
+            terrain_base = gif_env.build_terrain_base_rgb() if hasattr(gif_env, "build_terrain_base_rgb") else None
             obs, _ = gif_env.reset()
             done = False
             total_reward = 0.0
             frames = []
             step_count = 0
+            stations = getattr(gif_env, "stations", [])
+            scale = 4
 
             while not done:
                 action = agent.get_action(obs)
@@ -202,21 +237,43 @@ def train(
                 done = terminated or truncated
                 step_count += 1
 
-                if step_count % 9 == 0 or done:
-                    fire_map = np.copy(gif_env.sim.fire_map)
-                    ap = gif_env.agent_pos
+                if step_count % max(1, gif_env.num_agents) == 0 or done:
+                    fire_map = np.copy(gif_env.fire_map)
                     h, w = fire_map.shape
-                    rgb = np.zeros((h, w, 3), dtype=np.uint8)
-                    rgb[fire_map == 0] = [34, 139, 34]
-                    rgb[fire_map == 1] = [255, 50, 0]
-                    rgb[fire_map == 2] = [80, 80, 80]
-                    rgb[fire_map == 3] = [0, 120, 255]
-                    for di in [-1, 0, 1]:
-                        for dj in [-1, 0, 1]:
-                            r, c = ap[0] + di, ap[1] + dj
-                            if 0 <= r < h and 0 <= c < w:
-                                rgb[r, c] = [255, 255, 0]
-                    img = PILImage.fromarray(rgb).resize((w * 4, h * 4), PILImage.NEAREST)
+                    rgb = terrain_base.copy() if terrain_base is not None else np.zeros((h, w, 3), dtype=np.uint8)
+                    # Fire overlay
+                    burning_mask = fire_map == 1
+                    burned_mask  = fire_map == 2
+                    rgb[burning_mask] = (rgb[burning_mask] * 0.15 + np.array([255, 65, 0]) * 0.85).astype(np.uint8)
+                    rgb[burned_mask]  = (rgb[burned_mask]  * 0.20 + np.array([45, 30, 25]) * 0.80).astype(np.uint8)
+                    # Mitigation
+                    rgb[fire_map == 3] = (rgb[fire_map == 3] * 0.2 + np.array([0, 100, 255]) * 0.8).astype(np.uint8)
+                    rgb[fire_map == 4] = (rgb[fire_map == 4] * 0.2 + np.array([255, 140, 0]) * 0.8).astype(np.uint8)
+                    rgb[fire_map == 5] = (rgb[fire_map == 5] * 0.2 + np.array([0, 210, 210]) * 0.8).astype(np.uint8)
+                    img = PILImage.fromarray(rgb).resize((w * scale, h * scale), PILImage.NEAREST)
+                    draw = ImageDraw.Draw(img)
+                    # Yellow agents: PIL circles drawn after upscale so they always
+                    # appear above any mitigation colour (orange scratchline trail, etc.)
+                    agent_radius = scale + 1
+                    for ag in gif_env.agents:
+                        ap = ag["pos"]
+                        cx = ap[1] * scale + scale // 2
+                        cy = ap[0] * scale + scale // 2
+                        draw.ellipse(
+                            [(cx - agent_radius - 1, cy - agent_radius - 1),
+                             (cx + agent_radius + 1, cy + agent_radius + 1)],
+                            fill=(40, 40, 40),
+                        )
+                        draw.ellipse(
+                            [(cx - agent_radius, cy - agent_radius),
+                             (cx + agent_radius, cy + agent_radius)],
+                            fill=(255, 220, 0),
+                        )
+                    for s in stations:
+                        cx = s.get("grid_col", 0) * scale + scale // 2
+                        cy = s.get("grid_row", 0) * scale + scale // 2
+                        sz = scale * 2
+                        draw.polygon([(cx, cy - sz), (cx - sz, cy + sz), (cx + sz, cy + sz)], fill=(0, 200, 200), outline=(255, 255, 255))
                     frames.append(img)
 
             if frames:
