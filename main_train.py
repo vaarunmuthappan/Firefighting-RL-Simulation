@@ -37,7 +37,7 @@ def _parse_args() -> argparse.Namespace:
         "--algorithm",
         type=str,
         default=None,
-        choices=["DQN"],
+        choices=["DQN", "PPO"],
         help="Override the algorithm specified in train_config.yaml.",
     )
     parser.add_argument(

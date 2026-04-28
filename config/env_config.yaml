@@ -32,6 +32,13 @@ moisture: 0.03
 obs_window_size: 220
 obs_downsample: 4
 
+# Agent action space
+# movements   : 4 cardinal directions (env prepends implicit "none" → 5 total)
+# interactions: 3 mitigation types   (env prepends implicit "none" → 4 total)
+# Total discrete actions = 5 × 4 = 20
+movements:    ["up", "down", "left", "right"]
+interactions: ["fireline", "scratchline", "wetline"]
+
 # Episode settings — shorter episodes = more training signal per hour
 max_episode_steps: 5000
 
