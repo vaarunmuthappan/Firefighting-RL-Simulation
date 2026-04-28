@@ -2,19 +2,39 @@
 
 Two reward systems:
 
-  A. Data-driven env (DataDrivenFireEnv) — fighting_fire_reward():
-     Applied per ROUND (once all agents complete their turn):
-       1. Mitigation-contact reward: +300/+150/+75 per fireline/scratchline/wetline
-          cell edge-adjacent to a burning cell  →  dense causal signal for fire-fighting
-       2. Fire-front growth penalty: -50 × new cells ignited this round
-          →  immediate signal tied to fire spreading, not lagged cumulative area
-       3. Population penalty: -100 × population of newly burned cells
-          →  scaled down from -1,000,000 so it doesn't drown the dense signals above
-     Applied per AGENT STEP:
-       4. Conditional timestep penalty:
-            -1   if any agent is within PROXIMITY_RADIUS cells of a burning cell
-            -5   otherwise
-          →  removes the -10M/episode baseline; being near fire is no longer penalised
+  A. Data-driven env (DataDrivenFireEnv):
+
+     Per AGENT STEP (individual, computed inside the env):
+       1. Sector approach reward  — +5 per cell closer to the agent's Voronoi
+          sector target.  Each agent's sector is the set of dynamic-k predicted
+          fire cells whose Manhattan distance is smallest to that agent's home
+          fire station.  This is a station-proximity Voronoi partition: if
+          station A is NW and station B is SE, agent A targets the NW portion
+          of the predicted fire front and agent B the SE portion.
+          Dynamic k = max(1, min(4, ceil(dist_to_fire / actions_per_fire_step))
+          so far-away agents aim at a future front and intercept rather than chase.
+       2. Interception placement — reward depends on t_ahead = fire_arrival[r,c]
+          minus fire_timestep when mitigation is placed on an UNBURNED cell:
+            t_ahead == 2 → +400  (optimal: 6 h ahead, time to build a full line)
+            t_ahead == 1 → +200  (reactive: 3 h ahead, barely in time)
+            t_ahead in {3,4} → +150  (proactive positioning)
+            t_ahead >  4 →   0  (fire will arrive — no bonus, no penalty)
+            near burning/ahead_1-2 → +50  (fallback defensive placement)
+            otherwise → −30  (genuinely wasted: fire never reaches that cell)
+       3. Individual contact bonus — +300/+150/+75 per fire-adjacent edge for
+          fireline/scratchline/wetline, routed ONLY to the placing agent.
+          Held in pending_agent_rewards; consumed on that agent's next turn.
+       4. Individual blocked-cells reward — +600 per cell with fire_arrival ==
+          fire_timestep that still has mitigation at the timestep boundary,
+          routed to the placing agent.
+       5. Flat step penalty: −1 per step.
+       6. Per-station growth penalty — −50 per newly burned cell that falls in
+          the agent's own Voronoi sector (closest to their home station).
+          Fire burning outside your sector does NOT penalise you — only fire
+          you were responsible for blocking counts against you.
+
+     No population penalty (removed).
+     No shared round reward — all signals are individually attributed.
 
   B. SimFire env (FireEnv) — kept for backwards compatibility:
      1. Burning RoS penalty
@@ -49,75 +69,27 @@ _CROSS_KERNEL = np.array([[0, 1, 0],
 # Data-driven reward (DataDrivenFireEnv)
 # ---------------------------------------------------------------------------
 
-# Radius (cells) within which an agent is considered "near fire"
-PROXIMITY_RADIUS: int = 5
-
-# Mitigation-contact bonuses (per edge-adjacent contact with burning cell)
-_MIT_CONTACT_BONUS = {
-    _FIRELINE:    300.0,
-    _SCRATCHLINE: 150.0,
-    _WETLINE:      75.0,
-}
-
-# Fire-front growth penalty per newly ignited cell
-_GROWTH_PENALTY_PER_CELL: float = 50.0
-
-# Population penalty per person in a newly burned cell
-_POP_PENALTY_PER_PERSON: float = 100.0
-
-# Timestep penalty: 3-tier based on proximity to active fire front.
-# ≤2 cells: minimal penalty  — agent is right at the fire edge, fully engaged
-# ≤5 cells: moderate penalty — agent is near the fire
-# >5 cells: large penalty    — agent is far from fire, idling / lost in burned area
-_CLOSE_RADIUS:       int   = 2
-_STEP_PENALTY_CLOSE: float =  0.0   # ≤2 cells: right at fire — no penalty
-_STEP_PENALTY_NEAR:  float = -0.5   # ≤5 cells: near fire
-_STEP_PENALTY_FAR:   float = -2.0   # >5 cells: far from fire / idling
-# Reduced from (-0.5/-2/-5) so the approach reward (+3/cell) always wins:
-# moving 1 cell closer from far away = +3 approach - 2 step = +1 net reward.
+# Flat timestep penalty — uniform; the sector approach reward (+5/cell) already
+# provides all the proximity gradient needed.
+_STEP_PENALTY_FLAT: float = -1.0
 
 
 def fighting_fire_step_penalty(agent_positions: list, fire_map: np.ndarray) -> float:
-    """3-tier conditional timestep penalty applied every agent step.
+    """Flat timestep penalty applied every agent step: −1.0.
 
-    Finds the distance from the agent to the nearest BURNING cell and returns:
-      ≤2 cells: -0.5  (engaged — right at the fire edge)
-      ≤5 cells: -2.0  (near fire)
-      >5 cells: -5.0  (far from fire, idling)
-
-    Called with a single-agent position list so each agent gets its own
-    individual incentive — no free-rider effect.
+    Replaces the old 3-tier proximity-based logic.  The sector approach
+    reward (+5 per cell closer to the intercept target) already provides a
+    strong directional gradient; the step penalty only needs to discourage
+    doing nothing.
 
     Args:
-        agent_positions: List of [row, col] (typically 1 element: current agent).
-        fire_map: 2D int array of BurnStatus values.
+        agent_positions: Unused (kept for API compatibility).
+        fire_map:        Unused (kept for API compatibility).
 
     Returns:
-        Scalar step penalty.
+        -1.0 always.
     """
-    rows, cols = fire_map.shape
-    min_dist = float("inf")
-    for pos in agent_positions:
-        r, c = int(pos[0]), int(pos[1])
-        # Search within the far radius to find the closest burning cell
-        r0 = max(0, r - PROXIMITY_RADIUS)
-        r1 = min(rows, r + PROXIMITY_RADIUS + 1)
-        c0 = max(0, c - PROXIMITY_RADIUS)
-        c1 = min(cols, c + PROXIMITY_RADIUS + 1)
-        sub_fire = fire_map[r0:r1, c0:c1] == _BURNING
-        if np.any(sub_fire):
-            fire_rs, fire_cs = np.where(sub_fire)
-            fire_rs = fire_rs + r0
-            fire_cs = fire_cs + c0
-            dists = np.sqrt((fire_rs - r) ** 2.0 + (fire_cs - c) ** 2.0)
-            min_dist = min(min_dist, float(dists.min()))
-
-    if min_dist <= _CLOSE_RADIUS:
-        return _STEP_PENALTY_CLOSE
-    elif min_dist <= PROXIMITY_RADIUS:
-        return _STEP_PENALTY_NEAR
-    else:
-        return _STEP_PENALTY_FAR
+    return _STEP_PENALTY_FLAT
 
 
 def fighting_fire_round_reward(
@@ -125,40 +97,17 @@ def fighting_fire_round_reward(
     population_grid: np.ndarray,
     prev_burned_mask: np.ndarray,
 ) -> float:
-    """Round reward applied once per full agent round (after fire advances).
+    """DEPRECATED — returns 0.0.
 
-    Combines three components:
-      1. Mitigation-contact reward  — dense positive signal for fire-fighting
-      2. Fire-front growth penalty  — immediate signal for fire spreading
-      3. Population penalty         — scaled to -100×people (not -1M×people)
+    Growth and population penalties have been removed:
+      • Population penalty: removed entirely.
+      • Growth penalty: moved to per-station individual signals computed
+        inside DataDrivenFireEnv.step() and routed via pending_agent_rewards.
 
-    Args:
-        fire_map:          2D int array of BurnStatus values (post-fire-advance).
-        population_grid:   2D float array of population per cell.
-        prev_burned_mask:  Boolean mask of cells that were burned/burning
-                           BEFORE this fire advance.
-
-    Returns:
-        Scalar reward (positive for good fire-fighting, negative for spread).
+    This function is retained only for API compatibility with any callers
+    that have not yet been updated.  It will always return 0.0.
     """
-    # 1. Mitigation-contact reward
-    burning_mask = fire_map == _BURNING
-    fire_adjacent = binary_dilation(burning_mask, structure=_CROSS_KERNEL)
-    contact_reward = 0.0
-    for mit_status, bonus in _MIT_CONTACT_BONUS.items():
-        contacts = (fire_map == mit_status) & fire_adjacent
-        contact_reward += float(np.count_nonzero(contacts)) * bonus
-
-    # 2. Fire-front growth penalty
-    burned_now = (fire_map == _BURNED) | (fire_map == _BURNING)
-    new_cells = float(np.count_nonzero(burned_now & ~prev_burned_mask))
-    growth_penalty = -_GROWTH_PENALTY_PER_CELL * new_cells
-
-    # 3. Population penalty (scaled down)
-    newly_burned = burned_now & ~prev_burned_mask
-    pop_penalty = -_POP_PENALTY_PER_PERSON * float(np.sum(population_grid[newly_burned]))
-
-    return contact_reward + growth_penalty + pop_penalty
+    return 0.0
 
 
 # ---------------------------------------------------------------------------
