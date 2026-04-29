@@ -41,5 +41,8 @@ wandb/
 # macOS
 .DS_Store
 
+# Claude
+.claude/
+
 # Simfire outputs
 ~/.simfire/

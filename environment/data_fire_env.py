@@ -16,8 +16,8 @@ Observation (LOCAL WINDOW — agent always at centre):
                            0.6=fireline, 0.8=scratchline, 1.0=wetline)
     1: fire_ahead_1     — binary: cells burning at fire_timestep+1  (3 h)
     2: fire_ahead_2     — binary: cells burning at fire_timestep+2  (6 h)
-    3: fire_ahead_3     — binary: cells burning at fire_timestep+3  (9 h)
-    4: fire_ahead_4     — binary: cells burning at fire_timestep+4  (12 h)
+    3: roads            — binary: 1 where any road exists
+    4: home_station     — binary: 1 at this agent's home fire station cell
     5: other_agents     — binary: 1.0 at every other agent's position
     6: mitigation       — binary: 1.0 where any mitigation type exists
 
@@ -27,23 +27,32 @@ Observation (LOCAL WINDOW — agent always at centre):
   the global fire state is identical.  Different inputs → different
   policy outputs → agents naturally spread across fire fronts.
 
-Reward design (all signals individually attributed — no shared/pooled rewards):
-  1. Sector approach (+5/cell): each agent targets the centroid of predicted
-     fire cells in their home station's Voronoi sector (cells closest to that
-     station by Manhattan distance).  Dynamic k = max(1, min(4,
-     ceil(dist_to_fire / actions_per_fire_step))) so far agents aim at a
-     future front rather than chasing the current one.
-  2. Interception placement: reward tier = t_ahead = fire_arrival[r,c] −
-     fire_timestep when mitigation is placed.  t+2→+400, t+1→+200,
-     t+3/4→+150, t>4→0, near-fire fallback→+50, genuinely wasted→−30.
-  3. Individual contact bonus (+300/+150/+75): routed to the agent who placed
-     the mitigation cell (mitigation_owner dict), paid next turn.
-  4. Individual blocked-cells reward (+600): for cells that fire_arrival maps
-     to this timestep but still carry mitigation, paid to the placing agent.
-  5. Per-station growth penalty (−50/cell): newly burned cells are assigned
-     to the nearest fire station by Voronoi; agents from THAT station receive
-     the penalty.  Agents from other stations are not penalised.
-  6. Flat step penalty: −1 per step.
+Reward design:
+  1. Step penalty (3-tier, aggressive): 0 (≤5 cells to fire), −20 (≤20), −50 (>20).
+     Strong pull toward fire — agent 50 steps away loses 2.5 scaled reward.
+  2. Perimeter patrol (+8/step): agent on an UNBURNED t+1 cell IN OWN SECTOR.
+     Sector gating distributes agents: two agents on the same t+1 cell means
+     one is outside their Voronoi sector and collects no bonus.
+  3. Burned-area penalty (−20/step): agent on a BURNED cell is penalised to
+     motivate leaving already-burned ground and seeking the live perimeter.
+  4. Placement by t_ahead = fire_arrival[r,c] − fire_timestep:
+     t+1→+600, t+2→+300, t+3→+50, t+4+→−50, t≤0→−20.
+  5. Line adjacency bonus (+250): placed cell adjacent to existing mitigation
+     AND t_ahead 1–3.  Guards: lines far from fire path get nothing.
+  6. Blocked-cells reward (+1500): fire arrival timestep came but cell still
+     has mitigation → fire stopped.  Routed to placing agent.
+  7. Shared growth penalty (−5/cell ÷ num_agents): small shared signal.
+  Contact bonus REMOVED — was firing every sub-step causing parking exploit.
+
+Voronoi sectors (perimeter allocation):
+  At episode reset and at each fire timestep boundary, self.agent_sector_map
+  is rebuilt: each grid cell is assigned to its nearest agent (Manhattan dist).
+  Unlike the old home-station Voronoi (which dragged agents back to far-away
+  stations), this uses CURRENT agent positions so sectors always centre where
+  agents actually are — near the fire.  Agents that cluster together shrink
+  each other's sectors; spreading out maximises individual patrol reward.
+  Observation channel 4 shows the agent its full sector mask so the CNN has
+  direct spatial information about which part of the perimeter to defend.
 """
 import copy
 import json
@@ -109,49 +118,75 @@ OBS_DOWNSAMPLE: int = 4      # spatial stride: 220 → 55 pixels
 OBS_N_CHANNELS: int = 8      # 7 spatial + 1 agent-ID channel
 
 # ---------------------------------------------------------------------------
-# Reward constants — sector approach + interception placement + individual
-#                    contact/blocked signals (see reward_functions.py docstring
-#                    for full rationale).
+# Reward constants
 # ---------------------------------------------------------------------------
+# Reward constants
+# ---------------------------------------------------------------------------
+#
+# Full reward design:
+#
+# Every step:
+#   Step penalty (3-tier, reward_functions.py):
+#     ≤5  cells to fire →   0   (at the front — no cost)
+#     ≤20 cells         → −20   (en route)
+#     >20 cells         → −50   (far away — aggressive pull toward fire)
+#
+#   Perimeter patrol (+8):
+#     Agent standing on an UNBURNED cell where fire_arrival==fire_timestep+1.
+#     Rewards patrolling the active fire edge without oscillation (no movement
+#     direction involved — just being in the right place).
+#
+# When placing mitigation (on UNBURNED cell):
+#   Placement by t_ahead = fire_arrival[r,c] − fire_timestep:
+#     t+1 → +600  (3 h: best)
+#     t+2 → +300  (6 h)
+#     t+3 →  +50  (9 h: minimal)
+#     t+4+ → −50  (too far ahead: penalised)
+#     t≤0  → −20  (wasted)
+#
+#   Line adjacency bonus (+250):
+#     Placed cell is 4-connected to existing mitigation AND t_ahead 1–3.
+#     Guards against rewarding lines far from fire path.
+#
+# After each fire sub-step (round of all agents):
+#   Growth penalty: −5/cell burned ÷ num_agents (shared, small)
+#   Contact bonus: REMOVED — was firing every sub-step causing parking exploit.
+#
+# At fire timestep boundary:
+#   Blocked-cells reward (+1500 per cell):
+#     fire_arrival==fire_timestep but cell still has mitigation → fire stopped.
+#     Routed to placing agent.  Increased to compensate for removed contact bonus.
 
-# Sector approach reward: raw per cell moved closer to agent's sector target.
-# Net incentive vs flat step penalty (-1): +5 − 1 = +4 per approach step.
-_SECTOR_APPROACH_REWARD: float = 5.0
+# Perimeter patrol bonus — standing on an unburned t+1 cell
+_PERIMETER_PATROL_BONUS: float = 8.0
 
-# Interception placement bonuses (raw, pre-reward-scale) by t_ahead buckets.
-# t_ahead = fire_arrival[r,c] − fire_timestep
+# Placement bonuses by t_ahead
 _INTERCEPTION_BONUS: Dict[int, float] = {
-    1: 200.0,   # reactive — fire arrives in 1 fire-timestep (3 h)
-    2: 400.0,   # optimal  — fire arrives in 2 fire-timesteps (6 h)
-    3: 150.0,   # proactive — fire arrives in 3 fire-timesteps (9 h)
-    4: 150.0,   # proactive — fire arrives in 4 fire-timesteps (12 h)
+    1: 600.0,
+    2: 300.0,
+    3:  50.0,
 }
-# Fallback: placement is not on a predicted path but IS near active/predicted fire
-_INTERCEPTION_NEAR_BONUS: float = 50.0
-# Radius for "near fire" fallback check (cells)
-_INTERCEPTION_NEAR_RADIUS: int = 5
-# Wasted penalty: fire NEVER reaches this cell AND not near any fire/prediction.
-# t_ahead > 4 gets 0 (fire will reach eventually, just beyond the 12h window).
-_WASTED_PLACEMENT_PENALTY: float = 30.0
+_PLACEMENT_FUTURE_BONUS: float  = -50.0   # t_ahead >= 4: too far ahead
+_WASTED_PLACEMENT_PENALTY: float = 20.0   # t_ahead <= 0: wasted
 
-# Individual mitigation contact bonus — routed to the agent who placed the cell.
-# Stored in pending_agent_rewards; consumed on the placing agent's next turn.
-# Bonuses match the original round-reward values so the agent receives the same
-# signal, just attributed to the correct agent.
-_MIT_CONTACT_BONUS_INDIV: Dict[int, float] = {
-    FIRELINE:    300.0,
-    SCRATCHLINE: 150.0,
-    WETLINE:      75.0,
-}
+# Line adjacency bonus — only on fire path (t_ahead 1–3)
+_LINE_ADJACENCY_BONUS: float = 250.0
 
-# Individual blocked-cells reward — higher than old shared value (+300) because
-# it is now properly attributed: only the placing agent gets the credit.
-_BLOCKED_CELLS_REWARD: float = 600.0
+# Fireline securing bonus — placing mitigation adjacent to already-BURNED cells.
+# Rewards agents for extending/closing the perimeter of burned area even after
+# fire has passed that cell, since embers can re-ignite unprotected edges.
+_FIRELINE_SECURING_BONUS: float = 150.0
 
-# Per-station growth penalty (raw, pre-reward-scale) per newly burned cell
-# that falls in the agent's home station's Voronoi sector.  Fire burning in
-# someone else's territory does NOT penalise this agent.
-_GROWTH_PENALTY_PER_CELL: float = 50.0
+# Blocked-cells reward (increased from 800 — contact bonus removed)
+_BLOCKED_CELLS_REWARD: float = 1500.0
+
+# Growth penalty — small, shared equally
+_GROWTH_PENALTY_PER_CELL: float = 5.0
+
+# Burned-area penalty — discourages standing on already-burned ground.
+# Complements the 3-tier step penalty: near-fire gives 0 cost, but being IN
+# the burned area (wrong side of perimeter) costs an extra penalty every step.
+_BURNED_AREA_PENALTY: float = 20.0
 
 # 4-connected structuring element for fire-adjacency detection
 _CROSS_KERNEL = np.array([[0, 1, 0],
@@ -307,8 +342,8 @@ class DataDrivenFireEnv(BaseFireEnv):
             self.num_agents = 1  # fallback
 
         # Precompute station grid positions as a (num_stations, 2) int array.
-        # Used by _get_sector_target for Voronoi partitioning and by the
-        # per-station growth penalty to attribute fire spread to a responsible agent.
+        # Used by the per-station growth penalty to attribute newly burned cells
+        # to the nearest home station (Voronoi ownership by Manhattan distance).
         self.station_positions: np.ndarray = np.array(
             [[s["grid_row"], s["grid_col"]] for s in self.stations],
             dtype=np.int32,
@@ -383,6 +418,12 @@ class DataDrivenFireEnv(BaseFireEnv):
         # Per-agent pending rewards (contact + blocked) accumulated during round
         # processing and paid out on each agent's next turn.
         self.pending_agent_rewards: List[float] = [0.0] * max(self.num_agents, 1)
+
+        # Voronoi sector map: cell (r,c) → agent_idx who owns it (nearest agent).
+        # Rebuilt at reset and each fire timestep boundary.
+        self.agent_sector_map: np.ndarray = np.zeros(
+            (grid_rows, grid_cols), dtype=np.int8
+        )
 
     # ------------------------------------------------------------------
     # Pre-computation
@@ -576,6 +617,9 @@ class DataDrivenFireEnv(BaseFireEnv):
 
         self._ignite_full_timestep(0)
 
+        # Initial Voronoi sector assignment based on starting positions
+        self._recompute_voronoi_sectors()
+
         self.agent_pos = self.agents[0]["pos"]
         obs = self._build_observation()
         return obs, {}
@@ -649,64 +693,67 @@ class DataDrivenFireEnv(BaseFireEnv):
         # Pre-slice fire arrival grid to grid bounds (reused multiple times below)
         arr_full = self.fire_arrival[: self.grid_rows, : self.grid_cols]
 
-        # ---- Sector approach reward ------------------------------------------------
-        # Each agent targets a unique ROW-SECTOR of the dynamic-k predicted fire front.
-        # Dynamic k: k = max(1, min(4, ceil(dist_to_nearest_burning / actions_per_step)))
-        # so distant agents target farther-ahead fronts and intercept rather than chase.
-        #
-        # Sector assignment: sort all fire_ahead_k cells by row, slice evenly into N
-        # segments, agent i → segment i.  Two agents at the same cell get pulled in
-        # opposite directions (agent 0 → north slice, agent N-1 → south slice).
-        # This geometrically breaks clustering without any explicit crowding penalty.
-        if [r, c] != [_old_r, _old_c]:
-            _target = self._get_sector_target(self.current_agent_idx, r, c)
-            if _target is not None:
-                _tr, _tc = _target
-                _new_dist = abs(r - _tr) + abs(c - _tc)
-                _old_dist = abs(_old_r - _tr) + abs(_old_c - _tc)
-                _delta = _old_dist - _new_dist  # positive = moved closer
-                if _delta > 0:
-                    reward += _delta * _SECTOR_APPROACH_REWARD
+        # ---- Perimeter patrol bonus (own Voronoi sector only) --------------------
+        # +8 every step the agent occupies an UNBURNED t+1 cell AND that cell
+        # belongs to its own Voronoi sector.  Sector gating divides the perimeter:
+        # two agents on the same section → the one outside their sector earns
+        # nothing.  Agents therefore prefer uncrowded, undefended arcs.
+        if (self.fire_map[r, c] == UNBURNED
+                and arr_full[r, c] == self.fire_timestep + 1
+                and self.agent_sector_map[r, c] == self.current_agent_idx):
+            reward += _PERIMETER_PATROL_BONUS
 
-        # ---- Interception placement reward ----------------------------------------
-        # Applied only when placing mitigation on an UNBURNED cell.
-        # Reward tier depends on t_ahead = fire_arrival[r,c] − fire_timestep:
-        #   t_ahead == 2 → +400  optimal intercept (ahead of fire, time to build line)
-        #   t_ahead == 1 → +200  reactive (barely in time)
-        #   t_ahead in {3,4} → +150  proactive (early positioning)
-        #   t_ahead >  4 →   0   fire will arrive eventually — no bonus, no penalty
-        #   near burning/ahead → +50  fallback: defensive near-fire placement
-        #   otherwise → −30  genuinely wasted: fire never reaches AND not near fire
+        # ---- Burned-area penalty --------------------------------------------------
+        # Motivates agents to leave already-burned ground and seek the live
+        # perimeter.  Standing on BURNED cells is safe but strategically useless:
+        # fire has already passed, so no mitigation can help there.
+        if self.fire_map[r, c] == BURNED:
+            reward -= _BURNED_AREA_PENALTY
+
+        # ---- Placement reward + line adjacency bonus ------------------------------
+        # Placement tier based on t_ahead = fire_arrival[r,c] − fire_timestep:
+        #   t+1 → +600  (right at active edge — best)
+        #   t+2 → +300  (6 h ahead)
+        #   t+3 →  +50  (9 h — minimal, don't over-anticipate)
+        #   t+4+ → −50  (too far ahead — penalised)
+        #   t≤0  → −20  (wasted: already burned or fire never arrives)
+        #
+        # Line adjacency bonus (+250): ONLY when the placed cell is also on the
+        # fire path (t_ahead 1–3).  Prevents rewarding lines built far from fire.
         cell_value = self.fire_map[r, c]
         if cell_value == UNBURNED and interaction_str != "none":
             mitigation_type = MITIGATION_MAP.get(interaction_str, FIRELINE)
             self.fire_map[r, c] = mitigation_type
-            self.mitigation_owner[(r, c)] = self.current_agent_idx  # ownership
+            self.mitigation_owner[(r, c)] = self.current_agent_idx
 
             t_ahead = int(arr_full[r, c]) - self.fire_timestep
-
             if t_ahead in _INTERCEPTION_BONUS:
                 reward += _INTERCEPTION_BONUS[t_ahead]
-            elif t_ahead > 4:
-                pass  # fire will reach eventually — no bonus, no penalty
+                # Line adjacency bonus — only on fire path (t_ahead 1–3)
+                for _dr, _dc in ((-1, 0), (1, 0), (0, -1), (0, 1)):
+                    _nr, _nc = r + _dr, c + _dc
+                    if (0 <= _nr < self.grid_rows and 0 <= _nc < self.grid_cols
+                            and self.fire_map[_nr, _nc] in (
+                                FIRELINE, SCRATCHLINE, WETLINE)):
+                        reward += _LINE_ADJACENCY_BONUS
+                        break  # once per placement — not once per neighbour
+            elif t_ahead >= 4:
+                reward += _PLACEMENT_FUTURE_BONUS   # −50: too far ahead
             else:
-                # fire_arrival <= fire_timestep (won't burn) or 0 (origin cell).
-                # Grant near-fire fallback if within proximity of active/predicted fire.
-                _pr0 = max(0, r - _INTERCEPTION_NEAR_RADIUS)
-                _pr1 = min(self.grid_rows, r + _INTERCEPTION_NEAR_RADIUS + 1)
-                _pc0 = max(0, c - _INTERCEPTION_NEAR_RADIUS)
-                _pc1 = min(self.grid_cols, c + _INTERCEPTION_NEAR_RADIUS + 1)
-                _loc_fire = self.fire_map[_pr0:_pr1, _pc0:_pc1]
-                _loc_arr = arr_full[_pr0:_pr1, _pc0:_pc1]
-                _near_fire = (
-                    np.any(_loc_fire == BURNING)
-                    or np.any(_loc_arr == self.fire_timestep + 1)
-                    or np.any(_loc_arr == self.fire_timestep + 2)
+                # t_ahead <= 0: fire has already passed (or never reaches here).
+                # If the cell borders the burned perimeter, reward securing the
+                # fireline edge — embers can re-ignite unprotected boundaries.
+                # Otherwise penalise as a genuinely wasted placement.
+                _adj_burned = any(
+                    0 <= r + _dr < self.grid_rows
+                    and 0 <= c + _dc < self.grid_cols
+                    and self.fire_map[r + _dr, c + _dc] in (BURNED, BURNING)
+                    for _dr, _dc in ((-1, 0), (1, 0), (0, -1), (0, 1))
                 )
-                if _near_fire:
-                    reward += _INTERCEPTION_NEAR_BONUS
+                if _adj_burned:
+                    reward += _FIRELINE_SECURING_BONUS  # +150: securing perimeter
                 else:
-                    reward -= _WASTED_PLACEMENT_PENALTY
+                    reward -= _WASTED_PLACEMENT_PENALTY  # −20: genuinely wasted
 
         # ---- Advance to next agent ----
         self.current_agent_idx = (self.current_agent_idx + 1) % self.num_agents
@@ -721,45 +768,21 @@ class DataDrivenFireEnv(BaseFireEnv):
             # Advance fire by one sub-step
             self._advance_fire_substep()
 
-            # ---- Individual contact bonus (per owner) ----------------------------
-            # After fire advances, determine which mitigation cells are now adjacent
-            # to burning fire and credit the placing agent — not all agents.
-            # Stored in pending_agent_rewards; paid on that agent's next turn.
-            _burning_mask = self.fire_map == BURNING
-            _fire_adj = binary_dilation(_burning_mask, structure=_CROSS_KERNEL)
-            for (_cr, _cc), _owner in list(self.mitigation_owner.items()):
-                _mit_status = self.fire_map[_cr, _cc]
-                if (
-                    _mit_status in _MIT_CONTACT_BONUS_INDIV
-                    and _fire_adj[_cr, _cc]
-                ):
-                    self.pending_agent_rewards[_owner] += (
-                        _MIT_CONTACT_BONUS_INDIV[_mit_status]
-                    )
-
-            # ---- Per-station growth penalty (individual, not shared) --------------
-            # For every cell that newly ignited this sub-step, find the fire station
-            # with the smallest Manhattan distance to that cell (Voronoi ownership).
-            # All agents from that station receive a −50 penalty for each cell that
-            # burned in their territory — fire spreading in your zone is your fault.
-            # Agents from other stations are NOT penalised for those cells.
+            # ---- Shared growth penalty (no Voronoi) ---------------------------
+            # Every newly-burned cell is penalised equally across ALL agents.
+            # No per-station attribution — every agent is responsible for the
+            # whole fire.  Voronoi-based attribution removed: it pulled agents
+            # toward their home region rather than toward the actual fire front.
             _burned_now = (self.fire_map == BURNED) | (self.fire_map == BURNING)
             _newly_burned_cells = np.argwhere(_burned_now & ~self.prev_burned_mask)
-            if len(_newly_burned_cells) > 0 and len(self.station_positions) > 0:
-                # Pairwise Manhattan distance: (n_cells, n_stations)
-                _dists_cells_to_stations = (
-                    np.abs(_newly_burned_cells[:, 0:1] - self.station_positions[:, 0])
-                    + np.abs(_newly_burned_cells[:, 1:2] - self.station_positions[:, 1])
+            if len(_newly_burned_cells) > 0:
+                _per_agent_penalty = (
+                    _GROWTH_PENALTY_PER_CELL
+                    * len(_newly_burned_cells)
+                    / max(1, self.num_agents)
                 )
-                _closest_station = np.argmin(_dists_cells_to_stations, axis=1)  # (n,)
-                # Count how many cells burned in each station's Voronoi sector
-                for _s_idx in range(len(self.station_positions)):
-                    _n_sector_cells = int(np.sum(_closest_station == _s_idx))
-                    if _n_sector_cells > 0:
-                        _sector_penalty = _GROWTH_PENALTY_PER_CELL * _n_sector_cells
-                        for _ai, _ag in enumerate(self.agents):
-                            if _ag.get("station_idx") == _s_idx:
-                                self.pending_agent_rewards[_ai] -= _sector_penalty
+                for _ai in range(self.num_agents):
+                    self.pending_agent_rewards[_ai] -= _per_agent_penalty
 
             # Advance sub-step counter
             self.fire_sub_step += 1
@@ -781,6 +804,9 @@ class DataDrivenFireEnv(BaseFireEnv):
                 self.fire_sub_step = 0
                 for a in self.agents:
                     a["time_remaining"] = self.time_budget
+                # Recompute Voronoi sectors from updated agent positions so
+                # each agent's "territory" adjusts as they spread across the front.
+                self._recompute_voronoi_sectors()
                 if self.fire_timestep > self.max_fire_timestep:
                     self._is_active = False
 
@@ -880,6 +906,50 @@ class DataDrivenFireEnv(BaseFireEnv):
                     )
 
         return (np.clip(frame, 0, 1) * 255).astype(np.uint8)
+
+    def _get_nearest_fire_target(
+        self, r: int, c: int
+    ) -> Optional[Tuple[int, int]]:
+        """Return the nearest unmitigated intercept cell to position (r, c).
+
+        Targets the 3–9 h ahead window (fire_arrival in [fire_timestep+1,
+        fire_timestep+3]) — exactly the horizon where placing mitigation is
+        most rewarded.  No Voronoi, no home-station routing; purely local to
+        this agent's position so agents naturally spread across the fire front.
+
+        Search order (closest-front first):
+          1. t+1 (3 h — immediate front, highest placement reward 600)
+          2. t+2 (6 h — secondary, reward 400)
+          3. t+3 (9 h — fallback only)
+          4. t+4 to t+6 (last resort staging)
+          5. Any BURNING cell (ultimate fallback)
+        Keeping agents at the immediate fire edge minimises the gap between
+        the mitigation line and the final fire extent.
+        """
+        arr_full = self.fire_arrival[: self.grid_rows, : self.grid_cols]
+        fm = self.fire_map[: self.grid_rows, : self.grid_cols]
+        ft = self.fire_timestep
+
+        # Build boolean mask of UNBURNED cells once — reused across tiers.
+        unburned_mask = fm == UNBURNED
+
+        for delta in [1, 2, 3, 4, 5, 6]:
+            tier_mask = (arr_full == ft + delta) & unburned_mask
+            candidates = np.argwhere(tier_mask)
+            if len(candidates) == 0:
+                continue
+            dists = np.abs(candidates[:, 0] - r) + np.abs(candidates[:, 1] - c)
+            idx = int(np.argmin(dists))
+            return (int(candidates[idx, 0]), int(candidates[idx, 1]))
+
+        # Final fallback: nearest BURNING cell
+        burning_coords = np.argwhere(fm == BURNING)
+        if len(burning_coords) > 0:
+            dists = np.abs(burning_coords[:, 0] - r) + np.abs(burning_coords[:, 1] - c)
+            idx = int(np.argmin(dists))
+            return (int(burning_coords[idx, 0]), int(burning_coords[idx, 1]))
+
+        return None
 
     def _get_sector_target(
         self, agent_idx: int, r: int, c: int
@@ -987,16 +1057,19 @@ class DataDrivenFireEnv(BaseFireEnv):
 
         8 channels:
           0  fire_map      — normalised burn/mitigation status  [0, 1]
-          1  fire_ahead_1  — binary: fire_arrival == fire_timestep+1
-          2  fire_ahead_2  — binary: fire_arrival == fire_timestep+2
-          3  fire_ahead_3  — binary: fire_arrival == fire_timestep+3
-          4  fire_ahead_4  — binary: fire_arrival == fire_timestep+4
+          1  fire_ahead_1  — binary: fire_arrival == fire_timestep+1  (3 h)
+          2  fire_ahead_2  — binary: fire_arrival == fire_timestep+2  (6 h)
+          3  roads         — binary: 1.0 where any road exists (faster movement)
+                             Replaces fire_ahead_3: agents no longer see 9 h ahead,
+                             preventing them from leaping too far from the fire edge.
+          4  own_sector    — binary: 1.0 for every cell in this agent's Voronoi
+                             sector (nearest-agent partition, recomputed each fire
+                             timestep).  Tells the CNN which arc of the perimeter
+                             to defend.  Replaces home_station (single pixel →
+                             full sector mask: far richer spatial signal).
           5  other_agents  — binary: 1.0 at every other agent's cell
           6  mitigation    — binary: 1.0 where any mitigation exists
           7  agent_id_norm — constant = agent_idx / (num_agents−1)
-                             Breaks observation symmetry so that even when
-                             agents are co-located they see different inputs
-                             and the shared policy can assign different roles.
         """
         win = self.obs_window_size
         half = win // 2
@@ -1025,11 +1098,28 @@ class DataDrivenFireEnv(BaseFireEnv):
             fm_slice.astype(np.float32) / float(WETLINE)
         )
 
-        # Channels 1–4: binary fire prediction layers
-        for i, t_off in enumerate(range(1, 5)):
+        # Channels 1–2: binary fire prediction layers (3 h and 6 h only)
+        # fire_ahead_3 and fire_ahead_4 removed — they caused agents to leap
+        # 9–12 h ahead of the fire edge, leaving a gap of unburned cells
+        # between the fire line and the (useless) mitigation line.
+        for i, t_off in enumerate(range(1, 3)):
             window[w_r0:w_r1, w_c0:w_c1, 1 + i] = (
                 arr_slice == self.fire_timestep + t_off
             ).astype(np.float32)
+
+        # Channel 3: roads (binary) — shows where roads are for faster movement
+        if self.roads_grid is not None:
+            rd_slice = self.roads_grid[g_r0:g_r1, g_c0:g_c1]
+            window[w_r0:w_r1, w_c0:w_c1, 3] = (rd_slice > 0).astype(np.float32)
+
+        # Channel 4: own Voronoi sector mask (binary) — 1.0 for cells belonging
+        # to the current agent's sector.  Tells the CNN which arc of the perimeter
+        # this agent should defend.  Replaces the home_station single-pixel channel
+        # which carried almost no spatial information.
+        sec_slice = self.agent_sector_map[g_r0:g_r1, g_c0:g_c1]
+        window[w_r0:w_r1, w_c0:w_c1, 4] = (
+            sec_slice == self.current_agent_idx
+        ).astype(np.float32)
 
         # Channel 5: other agents (binary)
         for i, other in enumerate(self.agents):
@@ -1046,11 +1136,7 @@ class DataDrivenFireEnv(BaseFireEnv):
         )
         window[w_r0:w_r1, w_c0:w_c1, 6] = mit_mask.astype(np.float32)
 
-        # Channel 7: agent-ID normalised to [0, 1]
-        # Constant across all spatial positions — unique per agent.
-        # Even when two agents share the same cell (same channels 0–6),
-        # their channel-7 values differ, so the policy can output different
-        # actions for each (role specialisation without explicit coordination).
+        # Channel 7: agent-ID normalised to [0, 1] — unique per agent
         id_norm = (
             self.current_agent_idx / max(1, self.num_agents - 1)
         )
@@ -1066,6 +1152,33 @@ class DataDrivenFireEnv(BaseFireEnv):
         """Ignite all cells for a given fire timestep at once (t=0 only)."""
         newly_burning = (self.fire_arrival == t) & (self.fire_map == UNBURNED)
         self.fire_map[newly_burning] = BURNING
+
+    def _recompute_voronoi_sectors(self) -> None:
+        """Rebuild the Voronoi sector map from current agent positions.
+
+        Each grid cell is assigned to the nearest agent by Manhattan distance.
+        Called at episode reset and at every fire timestep boundary so sectors
+        dynamically track where agents actually are — ensuring sectors always
+        partition the LIVE fire perimeter, not far-away home stations.
+
+        Two agents near the same fire section → their sectors shrink and overlap
+        near them, leaving large gaps elsewhere.  The gated patrol bonus then
+        rewards agents who move to cover those gaps.
+        """
+        N = self.num_agents
+        if N <= 1:
+            self.agent_sector_map[:] = 0
+            return
+        positions = np.array([a["pos"] for a in self.agents], dtype=np.int32)  # (N, 2)
+        pos_r = positions[:, 0]  # (N,)
+        pos_c = positions[:, 1]  # (N,)
+        R, C = np.mgrid[0:self.grid_rows, 0:self.grid_cols]  # each (rows, cols)
+        # Broadcast: R[:,:,None] (rows,cols,1) − pos_r[None,None,:] (1,1,N) = (rows,cols,N)
+        dr = R[:, :, np.newaxis] - pos_r[np.newaxis, np.newaxis, :]
+        dc = C[:, :, np.newaxis] - pos_c[np.newaxis, np.newaxis, :]
+        self.agent_sector_map = np.argmin(
+            np.abs(dr) + np.abs(dc), axis=2
+        ).astype(np.int8)  # (rows, cols)
 
     def _is_fire_adjacent(self, r: int, c: int) -> bool:
         """Return True if (r, c) is 4-connected to any BURNING or BURNED cell."""

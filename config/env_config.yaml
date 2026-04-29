@@ -20,11 +20,13 @@ moisture: 0.03
 #   0: fire_map       — normalised burn/mitigation status [0,1]
 #   1: fire_ahead_1   — binary: cells burning at fire_timestep+1 (3 h)
 #   2: fire_ahead_2   — binary: cells burning at fire_timestep+2 (6 h)
-#   3: fire_ahead_3   — binary: cells burning at fire_timestep+3 (9 h)
-#   4: fire_ahead_4   — binary: cells burning at fire_timestep+4 (12 h)
+#   3: roads          — binary: 1.0 where any road exists (faster movement)
+#   4: own_sector     — binary: 1.0 for cells in this agent's Voronoi sector
 #   5: other_agents   — binary: 1.0 at every other agent's position
 #   6: mitigation     — binary: 1.0 where any mitigation type exists
 #   7: agent_id_norm  — constant = agent_idx/(num_agents-1); unique per agent
+# NOTE: fire_ahead_3 (9h) and fire_ahead_4 (12h) removed — seeing too far ahead
+# caused agents to over-anticipate, placing mitigation with a gap to the fire line.
 #
 # 220 > grid diagonal (~147 cells): entire fire always visible from any pos.
 # Agent-ID channel breaks symmetry: co-located agents see different channel-7
@@ -40,7 +42,7 @@ movements:    ["up", "down", "left", "right"]
 interactions: ["fireline", "scratchline", "wetline"]
 
 # Episode settings — shorter episodes = more training signal per hour
-max_episode_steps: 5000
+max_episode_steps: 10000
 
 # Reward scale: keeps per-step rewards in ±1 range so PPO's value function
 # can converge (raw rewards are ±300k; ×0.001 → ±300 per episode).

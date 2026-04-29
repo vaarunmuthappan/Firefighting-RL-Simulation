@@ -5,33 +5,31 @@ Two reward systems:
   A. Data-driven env (DataDrivenFireEnv):
 
      Per AGENT STEP (individual, computed inside the env):
-       1. Sector approach reward  — +5 per cell closer to the agent's Voronoi
-          sector target.  Each agent's sector is the set of dynamic-k predicted
-          fire cells whose Manhattan distance is smallest to that agent's home
-          fire station.  This is a station-proximity Voronoi partition: if
-          station A is NW and station B is SE, agent A targets the NW portion
-          of the predicted fire front and agent B the SE portion.
-          Dynamic k = max(1, min(4, ceil(dist_to_fire / actions_per_fire_step))
-          so far-away agents aim at a future front and intercept rather than chase.
-       2. Interception placement — reward depends on t_ahead = fire_arrival[r,c]
-          minus fire_timestep when mitigation is placed on an UNBURNED cell:
+       1. Interception placement — reward depends on t_ahead = fire_arrival[r,c]
+          minus fire_timestep when mitigation is placed on an UNBURNED cell.
+          GATED: bonus only awarded when agent is within _PLACEMENT_FIRE_RADIUS
+          cells of a BURNING cell or fire_ahead_1 cell (prevents station camping).
             t_ahead == 2 → +400  (optimal: 6 h ahead, time to build a full line)
             t_ahead == 1 → +200  (reactive: 3 h ahead, barely in time)
             t_ahead in {3,4} → +150  (proactive positioning)
-            t_ahead >  4 →   0  (fire will arrive — no bonus, no penalty)
             near burning/ahead_1-2 → +50  (fallback defensive placement)
-            otherwise → −30  (genuinely wasted: fire never reaches that cell)
-       3. Individual contact bonus — +300/+150/+75 per fire-adjacent edge for
+            not near fire → −20  (wasted: placing mitigation far from front)
+       2. Individual contact bonus — +300/+150/+75 per fire-adjacent edge for
           fireline/scratchline/wetline, routed ONLY to the placing agent.
           Held in pending_agent_rewards; consumed on that agent's next turn.
-       4. Individual blocked-cells reward — +600 per cell with fire_arrival ==
+       3. Individual blocked-cells reward — +600 per cell with fire_arrival ==
           fire_timestep that still has mitigation at the timestep boundary,
           routed to the placing agent.
-       5. Flat step penalty: −1 per step.
-       6. Per-station growth penalty — −50 per newly burned cell that falls in
+       4. Step penalty (3-tier, per agent): 0 (≤5 cells to fire), −3 (≤20), −8 (>20).
+          Strong gradient driving all agents toward the fire front.
+       5. Per-station growth penalty — −150 per newly burned cell that falls in
           the agent's own Voronoi sector (closest to their home station).
           Fire burning outside your sector does NOT penalise you — only fire
           you were responsible for blocking counts against you.
+
+     Sector approach reward REMOVED: Voronoi sectors were pulling northern/SE
+     agents to home regions far from the real fire front.  The 3-tier step
+     penalty provides the necessary directional gradient without misdirection.
 
      No population penalty (removed).
      No shared round reward — all signals are individually attributed.
@@ -69,27 +67,53 @@ _CROSS_KERNEL = np.array([[0, 1, 0],
 # Data-driven reward (DataDrivenFireEnv)
 # ---------------------------------------------------------------------------
 
-# Flat timestep penalty — uniform; the sector approach reward (+5/cell) already
-# provides all the proximity gradient needed.
-_STEP_PENALTY_FLAT: float = -1.0
+# 3-tier timestep penalty — drives agents toward fire.
+#   ≤ 5 cells from nearest BURNING cell  →  0.0   (in the fight, no cost)
+#   ≤ 20 cells                           → -3.0   (en route)
+#   > 20 cells                           → -8.0   (too far away)
+# Combined with approach reward (+5/cell toward intercept target):
+#   Moving toward fire from far: -8 + 5 = -3 net
+#   Moving away from fire:       -8 + 0 = -8 net
+#   Clear 5-unit gradient toward fire.
+_STEP_PENALTY_NEAR: float = 0.0
+_STEP_PENALTY_MID: float = -20.0
+_STEP_PENALTY_FAR: float = -50.0
+_NEAR_THRESHOLD: int = 5
+_MID_THRESHOLD: int = 20
 
 
 def fighting_fire_step_penalty(agent_positions: list, fire_map: np.ndarray) -> float:
-    """Flat timestep penalty applied every agent step: −1.0.
+    """3-tier timestep penalty based on distance to nearest burning cell.
 
-    Replaces the old 3-tier proximity-based logic.  The sector approach
-    reward (+5 per cell closer to the intercept target) already provides a
-    strong directional gradient; the step penalty only needs to discourage
-    doing nothing.
+    Tiers (Manhattan distance to nearest BURNING cell):
+      ≤  5 cells →  0.0  (in direct contact — no penalty)
+      ≤ 20 cells → -3.0  (actively travelling toward fire)
+      > 20 cells → -8.0  (too far from the front)
 
     Args:
-        agent_positions: Unused (kept for API compatibility).
-        fire_map:        Unused (kept for API compatibility).
+        agent_positions: List containing one [row, col] for the active agent.
+        fire_map:        2-D numpy array with BurnStatus values.
 
     Returns:
-        -1.0 always.
+        Scalar penalty.  Returns 0.0 if no BURNING cells exist yet.
     """
-    return _STEP_PENALTY_FLAT
+    burning_coords = np.argwhere(fire_map == _BURNING)
+    if len(burning_coords) == 0:
+        return _STEP_PENALTY_NEAR
+
+    pos = agent_positions[0] if isinstance(agent_positions[0], (list, tuple, np.ndarray)) else agent_positions
+    r, c = int(pos[0]), int(pos[1])
+
+    min_dist = int(np.min(
+        np.abs(burning_coords[:, 0] - r) + np.abs(burning_coords[:, 1] - c)
+    ))
+
+    if min_dist <= _NEAR_THRESHOLD:
+        return _STEP_PENALTY_NEAR
+    elif min_dist <= _MID_THRESHOLD:
+        return _STEP_PENALTY_MID
+    else:
+        return _STEP_PENALTY_FAR
 
 
 def fighting_fire_round_reward(
